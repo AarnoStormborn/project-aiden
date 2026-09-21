@@ -1,0 +1,19 @@
+%% The transcript tree is the source of truth; UI, LLM request and the refiner are projections.
+flowchart TD
+    H["SessionHeader"] --> U1["MessageEntry user"]
+    U1 --> A1["MessageEntry assistant<br/>usage{in,out,cache_read,cache_write}"]
+    A1 --> T1["ToolCallEntry"] --> T2["ToolResultEntry"]
+    T2 --> A2["MessageEntry assistant"]
+    A2 --> CE["<b>CompactionEntry</b><br/>first_kept_entry_id · retained_tail?"]
+    CE --> A3["compactionSummary message"]
+    A3 --> HE["<b>HarnessEditEntry</b><br/>refinement_id · kind · op<br/>snapshot_before / after"]
+    HE --> CU["<b>ChildUsageAttributedEntry</b><br/>parent_message_id · aggregate"]
+    CU --> EL["<b>EvalLinkEntry</b> run_id · state_hash"]
+    EL --> LEAF(["leaf = current position"])
+    A2 -. "fork / rewind" .-> BS["<b>BranchSummaryEntry</b><br/>what was ABANDONED<br/>+ cumulative file tracking"]
+    BS --> ALT(["alternate branch leaf"])
+    LEAF -.-> PROJ1["TUI timeline"]
+    LEAF -.-> PROJ2["LLM request"]
+    LEAF -.-> PROJ3["refiner: 'recent trajectory' window"]
+    classDef learn fill:#2d1b45,stroke:#a855f7,color:#f5d0fe
+    class CE,HE,BS,CU,EL learn

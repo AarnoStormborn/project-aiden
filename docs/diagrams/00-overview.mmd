@@ -1,0 +1,37 @@
+%% Aiden at a glance: model, harness, learning loop, eval loop.
+flowchart TB
+    U["Human<br/>(terminal, later desktop)"]
+
+    subgraph HARNESS["AIDEN HARNESS"]
+        direction TB
+        ASM["L2 assemble: immutable base prompt<br/>+ supplemental harness state"]
+        LOOP["L3 loop: turn state machine<br/>steering / follow-up queues"]
+        TOOLS["L4 tools: read grep glob edit write bash web_fetch"]
+        CTX["L5 context: caps, spill, compaction"]
+        SESS["L6 session: append-only entry tree (JSONL)"]
+        ENV["L0 environment: cwd, git, shell, trust"]
+    end
+
+    M["Model provider<br/>(any via pi-ai-shaped transport)"]
+    LEARN["LEARNING SUBSYSTEM<br/>ledger · refine(gate→writer) · probes · consolidate"]
+    EVAL["EVAL<br/>private task set · paired runs · resolved@cost"]
+
+    U -->|prompt / approve| LOOP
+    LOOP -->|request| M
+    M -->|stream: text, tool calls| LOOP
+    LOOP --> TOOLS --> ENV
+    LOOP --> SESS
+    SESS -->|trajectory evidence| LEARN
+    LEARN -->|prompt notes, memories,<br/>skills, subagent specs| ASM
+    ASM --> LOOP
+    LEARN -.->|proposals| EVAL
+    EVAL -->|pass/fail + cost| LEARN
+    EVAL -.->|gate| SESS
+    U <-->|transcript, diff review,<br/>learning feed, cost HUD| SESS
+
+    classDef learn fill:#2d1b45,stroke:#a855f7,stroke-width:3px,color:#f5d0fe
+    classDef eval fill:#1b2e2a,stroke:#2dd4bf,stroke-width:2px,color:#ccfbf1
+    classDef model fill:#2a2118,stroke:#f59e0b,color:#fde68a
+    class LEARN learn
+    class EVAL eval
+    class M model

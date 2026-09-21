@@ -1,0 +1,19 @@
+%% Guard ladder. Every rung returns an ERROR TOOL RESULT — never raises — so the model can self-correct.
+flowchart TD
+    CALL["assistant tool_call"] --> S1["1 · SCHEMA<br/>pydantic TypeAdapter"]
+    S1 -- invalid --> E1["error: name the offending field<br/>+ one corrected example"]
+    S1 --> S2["2 · SEMANTICS<br/>escapes cwd? binary? dir? past EOF?"]
+    S2 -- refused --> E2["error: explicit refusal string<br/>(empty output is never blank)"]
+    S2 --> S3["3 · POLICY<br/>before_tool_call → Allow | Block | Mutate<br/>deny beats allow · hooks cannot upgrade"]
+    S3 -- blocked --> E3["error: 'blocked: &lt;reason&gt;'<br/>optionally terminate"]
+    S3 --> S4["4 · EXECUTE<br/>timeout + cancel signal<br/>parallel only if read_only ∧ concurrency_safe"]
+    S4 --> S5["5 · SHAPE<br/>truncate head|tail · spill · timing<br/>counts · continuation hint"]
+    S5 --> S6["6 · VALIDATE-OUTPUT<br/>post-edit lint/parse gate (+3.0 pp)"]
+    S6 -- fail --> REV["revert edit · 3-part message:<br/>error / would-have-been / original"]
+    S6 --> OK(["tool result appended"])
+    REV --> OK
+    E1 --> OK
+    E2 --> OK
+    E3 --> OK
+    classDef gate fill:#132a24,stroke:#2dd4bf,color:#ccfbf1
+    class S3,S6 gate

@@ -1,0 +1,17 @@
+%% Inference and grading are separate halves - that seam lets Aiden swap harnesses freely.
+sequenceDiagram
+    participant T as Task dir
+    participant A as Aiden
+    participant E as Sandbox
+    participant O as Grader
+    A->>T: fetch problem_statement only
+    Note over T: gold patch and tests stay out of the agent's filesystem
+    A->>E: run at base_commit, egress off
+    E-->>A: cwd state
+    Note over A,E: step/cost limits trip -> auto-report, never silent
+    A->>O: preds.jsonl = model_patch
+    A->>O: traj.json = cost, turns, harness_version, state_hash
+    O->>E: reset, apply model_patch, apply test_patch
+    O->>O: run SELECTED tests (F2P + P2P)
+    O-->>T: resolved = all F2P pass AND all P2P pass
+    Note over O: paired vs baseline, 3 seeds.<br/>under 3pp is NOISE

@@ -1,0 +1,32 @@
+%% Two self-update tiers. Tier 2 is never reachable from the refinement path.
+flowchart TB
+    EVID["trajectory evidence"] --> SPLIT{"what is the lesson ABOUT?"}
+    SPLIT -- "Aiden's behaviour/prefs" --> T1
+    SPLIT -- "Aiden's OWN CODE or tool schema" --> T2
+    subgraph T1["TIER 1 - harness state (L3). reversible, no code change"]
+        direction TB
+        A1["refine gate -> writer"] --> A2["apply at turn boundary"] --> A3["probe: invoked? productive?"] --> A4["auto-rollback on regression"]
+    end
+    subgraph T2["TIER 2 - Aiden source. ALWAYS human-gated"]
+        direction TB
+        B1["proposal.md: why + diff plan + target eval tasks"] --> B2["git worktree .aiden/worktrees/proposal-SHA"]
+        B2 --> B3["static: ruff + mypy + pytest  ~10s"]
+        B3 --> B4["smoke eval: 15 tasks x 1 seed  ~$1"]
+        B4 --> B5["full eval: N tasks x 3 seeds vs pinned baseline  ~$10"]
+        B5 --> B6{"PROMOTE IFF resolved_delta >= 0<br/>AND cost_delta <= +15%<br/>AND no new infra failures<br/>AND |delta| > 3pp or n>=3 paired"}
+        B6 -- no --> B7([reject + record why])
+        B6 -- yes --> B8["HUMAN APPROVES diff + eval report in TUI"]
+        B8 --> B9["tag -> canary (own daily use) -> auto-revert"]
+    end
+    subgraph PERM["capability scoping, enforced by the tool layer not the prompt"]
+        P1[("ALLOW .aiden/harness/**")]
+        P2[("ALLOW+LOG .aiden/learning/proposals/**")]
+        P3[("DENY aiden/**  except inside proposal worktree")]
+        P4[("NEVER config.py, policy/**, base prompt")]
+    end
+    A1 -. "cannot write code" .-> P3
+    B2 --> P3
+    classDef ok fill:#132a24,stroke:#2dd4bf,color:#ccfbf1
+    classDef never fill:#3b1d1d,stroke:#f87171,color:#fecaca
+    class P1,P2 ok
+    class P3,P4 never

@@ -1,0 +1,33 @@
+%% The turn loop (L3). Adoption: Pi's shape + Claude Code's recovery-path discipline.
+flowchart TD
+    START([prompts enqueued]) --> POLL["pending = prompts + steering()"]
+    POLL --> OUTER{outer: has pending<br/>or more tools?}
+    OUTER -- no --> FOLLOW["follow_up() queue"]
+    FOLLOW -- messages --> POLL
+    FOLLOW -- empty --> END([agent_end])
+
+    OUTER -- yes --> PREP["prepare_next_turn(last_turn)<br/>compaction · model swap · budget check"]
+    PREP --> REPOLL{"slow op ran;<br/>re-poll steering"}
+    REPOLL --> INJ["inject pending messages<br/>as user/steer entries"]
+    INJ --> STREAM["stream_assistant()<br/>transform → convert_to_llm → transport"]
+    STREAM --> EV["emit message_start / deltas / message_end"]
+    EV --> STOP{"stop_reason?"}
+    STOP -- "error | aborted" --> END
+    STOP -- "length" --> FAILALL["FAIL ALL tool calls:<br/>args may be truncated"]
+    STOP -- "tool_use | end_turn" --> TC["tool_calls present?"]
+    TC -- no --> TURNEND
+    TC -- yes --> GATE{"before_tool_call<br/>Allow | Block | Mutate"}
+    FAILALL --> EXEC
+    GATE --> EXEC["execute batch<br/>parallel if all read_only+safe<br/>emit results in CALL ORDER"]
+    EXEC --> SHAPE["cap output · spill to file<br/>append continuation hints"]
+    SHAPE --> OUT{"post-edit lint/parse?"}
+    OUT -- fail --> REVERT["revert + 3-part error<br/>(error, would-have-been, original)"]
+    REVERT --> TURNEND
+    OUT -- ok --> APPEND["append tool results to context"]
+    APPEND --> TURNEND["turn_end<br/>TurnState = frozen replace"]
+    TURNEND --> STUCK{"N identical failing<br/>edits on one file?"}
+    STUCK -- yes --> NUDGE["inject strategy-change nudge<br/>(90.5% → 57.2% cliff)"]
+    NUDGE --> POLL
+    STUCK -- no --> SHOULD{"should_stop_after_turn()<br/>max_turns · cost_limit · user stop"}
+    SHOULD -- yes --> END
+    SHOULD -- no --> POLL

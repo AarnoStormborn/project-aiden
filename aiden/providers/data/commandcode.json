@@ -1,0 +1,1592 @@
+{
+  "anthropic-messages": {
+    "claude-fable-5": {
+      "api": "anthropic-messages",
+      "baseUrl": "https://api.commandcode.ai/provider",
+      "contextWindow": 1000000,
+      "id": "claude-fable-5",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "claude-fable-5 (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": "max",
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    },
+    "claude-fable-5-1": {
+      "api": "anthropic-messages",
+      "baseUrl": "https://api.commandcode.ai/provider",
+      "contextWindow": 1000000,
+      "id": "claude-fable-5-1",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "claude-fable-5-1 (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": "max",
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    },
+    "claude-haiku-4-5-20251001": {
+      "api": "anthropic-messages",
+      "baseUrl": "https://api.commandcode.ai/provider",
+      "contextWindow": 1000000,
+      "id": "claude-haiku-4-5-20251001",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "claude-haiku-4-5-20251001 (Command Code)",
+      "provider": "commandcode",
+      "reasoning": false
+    },
+    "claude-opus-4-7": {
+      "api": "anthropic-messages",
+      "baseUrl": "https://api.commandcode.ai/provider",
+      "contextWindow": 1000000,
+      "id": "claude-opus-4-7",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "claude-opus-4-7 (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": "max",
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    },
+    "claude-opus-4-8": {
+      "api": "anthropic-messages",
+      "baseUrl": "https://api.commandcode.ai/provider",
+      "contextWindow": 1000000,
+      "id": "claude-opus-4-8",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "claude-opus-4-8 (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": "max",
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    },
+    "claude-opus-5": {
+      "api": "anthropic-messages",
+      "baseUrl": "https://api.commandcode.ai/provider",
+      "contextWindow": 1000000,
+      "id": "claude-opus-5",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "claude-opus-5 (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": "max",
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    },
+    "claude-sonnet-4-6": {
+      "api": "anthropic-messages",
+      "baseUrl": "https://api.commandcode.ai/provider",
+      "contextWindow": 1000000,
+      "id": "claude-sonnet-4-6",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "claude-sonnet-4-6 (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": "max",
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    },
+    "claude-sonnet-5": {
+      "api": "anthropic-messages",
+      "baseUrl": "https://api.commandcode.ai/provider",
+      "contextWindow": 1000000,
+      "id": "claude-sonnet-5",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "claude-sonnet-5 (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": "max",
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    }
+  },
+  "openai-completions": {
+    "MiniMaxAI/MiniMax-M3": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "MiniMaxAI/MiniMax-M3",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "MiniMaxAI/MiniMax-M3 (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": null,
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": null
+      }
+    },
+    "Qwen/Qwen3.6-Max-Preview": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "Qwen/Qwen3.6-Max-Preview",
+      "input": [
+        "text"
+      ],
+      "maxTokens": 65536,
+      "name": "Qwen/Qwen3.6-Max-Preview (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true
+    },
+    "Qwen/Qwen3.6-Plus": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "Qwen/Qwen3.6-Plus",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "Qwen/Qwen3.6-Plus (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true
+    },
+    "Qwen/Qwen3.7-Flash": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "Qwen/Qwen3.7-Flash",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "Qwen/Qwen3.7-Flash (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true
+    },
+    "Qwen/Qwen3.7-Max": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "Qwen/Qwen3.7-Max",
+      "input": [
+        "text"
+      ],
+      "maxTokens": 65536,
+      "name": "Qwen/Qwen3.7-Max (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true
+    },
+    "Qwen/Qwen3.7-Plus": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "Qwen/Qwen3.7-Plus",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "Qwen/Qwen3.7-Plus (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true
+    },
+    "Qwen/Qwen3.8-27B": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "Qwen/Qwen3.8-27B",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 32,
+      "name": "Qwen/Qwen3.8-27B (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": null,
+        "low": "low",
+        "max": null,
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    },
+    "Qwen/Qwen3.8-Flash": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "Qwen/Qwen3.8-Flash",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "Qwen/Qwen3.8-Flash (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": null,
+        "low": "low",
+        "max": null,
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    },
+    "Qwen/Qwen3.8-Max": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "Qwen/Qwen3.8-Max",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "Qwen/Qwen3.8-Max (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": null,
+        "low": "low",
+        "max": null,
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    },
+    "Qwen/Qwen3.8-Max-0902": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "Qwen/Qwen3.8-Max-0902",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "Qwen/Qwen3.8-Max-0902 (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": null,
+        "low": "low",
+        "max": null,
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    },
+    "Qwen/Qwen3.8-Omni-Flash": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "Qwen/Qwen3.8-Omni-Flash",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 131,
+      "name": "Qwen/Qwen3.8-Omni-Flash (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": null,
+        "low": "low",
+        "max": null,
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    },
+    "deepseek/deepseek-v4-flash": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "deepseek/deepseek-v4-flash",
+      "input": [
+        "text"
+      ],
+      "maxTokens": 65536,
+      "name": "deepseek/deepseek-v4-flash (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": null,
+        "max": "max",
+        "medium": null,
+        "minimal": null,
+        "off": null,
+        "xhigh": null
+      }
+    },
+    "deepseek/deepseek-v4-flash-fast": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "deepseek/deepseek-v4-flash-fast",
+      "input": [
+        "text"
+      ],
+      "maxTokens": 65536,
+      "name": "deepseek/deepseek-v4-flash-fast (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": "max",
+        "medium": null,
+        "minimal": null,
+        "off": null,
+        "xhigh": null
+      }
+    },
+    "deepseek/deepseek-v4-flash-vision-exp": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "deepseek/deepseek-v4-flash-vision-exp",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "deepseek/deepseek-v4-flash-vision-exp (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": null,
+        "max": "max",
+        "medium": null,
+        "minimal": null,
+        "off": null,
+        "xhigh": null
+      }
+    },
+    "deepseek/deepseek-v4-pro": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "deepseek/deepseek-v4-pro",
+      "input": [
+        "text"
+      ],
+      "maxTokens": 65536,
+      "name": "deepseek/deepseek-v4-pro (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": null,
+        "max": "max",
+        "medium": null,
+        "minimal": null,
+        "off": null,
+        "xhigh": null
+      }
+    },
+    "deepseek/deepseek-v4.1-flash": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "deepseek/deepseek-v4.1-flash",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "deepseek/deepseek-v4.1-flash (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": "max",
+        "medium": null,
+        "minimal": null,
+        "off": null,
+        "xhigh": null
+      }
+    },
+    "google/gemini-3.1-flash-lite": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "google/gemini-3.1-flash-lite",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "google/gemini-3.1-flash-lite (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": null,
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": null
+      }
+    },
+    "google/gemini-3.5-flash": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "google/gemini-3.5-flash",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "google/gemini-3.5-flash (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": null,
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": null
+      }
+    },
+    "google/gemini-3.5-flash-lite": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "google/gemini-3.5-flash-lite",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "google/gemini-3.5-flash-lite (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": null,
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": null
+      }
+    },
+    "google/gemini-3.6-flash": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "google/gemini-3.6-flash",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "google/gemini-3.6-flash (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": null,
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": null
+      }
+    },
+    "google/gemini-3.7-flash": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "google/gemini-3.7-flash",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "google/gemini-3.7-flash (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": null,
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": null
+      }
+    },
+    "google/gemini-3.8-flash": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "google/gemini-3.8-flash",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "google/gemini-3.8-flash (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": null,
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": null
+      }
+    },
+    "gpt-5.3-codex": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "gpt-5.3-codex",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "gpt-5.3-codex (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": null,
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    },
+    "gpt-5.4": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "gpt-5.4",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "gpt-5.4 (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": null,
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    },
+    "gpt-5.4-mini": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "gpt-5.4-mini",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "gpt-5.4-mini (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": null,
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": null
+      }
+    },
+    "gpt-5.5": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "gpt-5.5",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "gpt-5.5 (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": null,
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    },
+    "gpt-5.6-luna": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "gpt-5.6-luna",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "gpt-5.6-luna (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": "max",
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    },
+    "gpt-5.6-sol": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "gpt-5.6-sol",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "gpt-5.6-sol (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": "max",
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    },
+    "gpt-5.6-terra": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "gpt-5.6-terra",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "gpt-5.6-terra (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": "max",
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    },
+    "gpt-6-astra": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "gpt-6-astra",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "gpt-6-astra (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": "max",
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    },
+    "inclusionai/ling-3.0-flash-sante:free": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "inclusionai/ling-3.0-flash-sante:free",
+      "input": [
+        "text"
+      ],
+      "maxTokens": 32,
+      "name": "inclusionai/ling-3.0-flash-sante:free (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true
+    },
+    "meituan/LongCat-2.0:free": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "meituan/LongCat-2.0:free",
+      "input": [
+        "text"
+      ],
+      "maxTokens": 65536,
+      "name": "meituan/LongCat-2.0:free (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true
+    },
+    "meta/muse-spark-1.1": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "meta/muse-spark-1.1",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "meta/muse-spark-1.1 (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": null,
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    },
+    "meta/muse-spark-1.2": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "meta/muse-spark-1.2",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "meta/muse-spark-1.2 (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": null,
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    },
+    "meta/muse-spark-1.2-contributor": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "meta/muse-spark-1.2-contributor",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "meta/muse-spark-1.2-contributor (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": null,
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    },
+    "meta/muse-spark-1.3": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "meta/muse-spark-1.3",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "meta/muse-spark-1.3 (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": "max",
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    },
+    "meta/muse-spark-1.3-contributor": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "meta/muse-spark-1.3-contributor",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "meta/muse-spark-1.3-contributor (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": null,
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    },
+    "moonshotai/Kimi-K2.5": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "moonshotai/Kimi-K2.5",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "moonshotai/Kimi-K2.5 (Command Code)",
+      "provider": "commandcode",
+      "reasoning": false
+    },
+    "moonshotai/Kimi-K2.6": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "moonshotai/Kimi-K2.6",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "moonshotai/Kimi-K2.6 (Command Code)",
+      "provider": "commandcode",
+      "reasoning": false
+    },
+    "moonshotai/Kimi-K2.7-Code": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "moonshotai/Kimi-K2.7-Code",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "moonshotai/Kimi-K2.7-Code (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true
+    },
+    "moonshotai/Kimi-K2.7-Code-Highspeed": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "moonshotai/Kimi-K2.7-Code-Highspeed",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "moonshotai/Kimi-K2.7-Code-Highspeed (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true
+    },
+    "moonshotai/Kimi-K3": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "moonshotai/Kimi-K3",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "moonshotai/Kimi-K3 (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": "max",
+        "medium": null,
+        "minimal": null,
+        "off": null,
+        "xhigh": null
+      }
+    },
+    "nvidia/nemotron-3-ultra-550b-a55b": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "nvidia/nemotron-3-ultra-550b-a55b",
+      "input": [
+        "text"
+      ],
+      "maxTokens": 65536,
+      "name": "nvidia/nemotron-3-ultra-550b-a55b (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true
+    },
+    "poolside/laguna-s-2.1-free": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "poolside/laguna-s-2.1-free",
+      "input": [
+        "text"
+      ],
+      "maxTokens": 32,
+      "name": "poolside/laguna-s-2.1-free (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true
+    },
+    "sakana/fugu-ultra": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "sakana/fugu-ultra",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "sakana/fugu-ultra (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": null,
+        "max": null,
+        "medium": null,
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    },
+    "stepfun/Step-3.5-Flash": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "stepfun/Step-3.5-Flash",
+      "input": [
+        "text"
+      ],
+      "maxTokens": 65536,
+      "name": "stepfun/Step-3.5-Flash (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true
+    },
+    "stepfun/Step-3.7-Flash": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "stepfun/Step-3.7-Flash",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "stepfun/Step-3.7-Flash (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true
+    },
+    "tencent/hy3-paid": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "tencent/hy3-paid",
+      "input": [
+        "text"
+      ],
+      "maxTokens": 65536,
+      "name": "tencent/hy3-paid (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true
+    },
+    "tencent/hy4-preview": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "tencent/hy4-preview",
+      "input": [
+        "text"
+      ],
+      "maxTokens": 65536,
+      "name": "tencent/hy4-preview (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": null,
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": null
+      }
+    },
+    "thinkingmachines/inkling": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "thinkingmachines/inkling",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "thinkingmachines/inkling (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true
+    },
+    "thinkingmachines/inkling-small": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "thinkingmachines/inkling-small",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "thinkingmachines/inkling-small (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true
+    },
+    "xai/grok-4.5": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "xai/grok-4.5",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "xai/grok-4.5 (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": null,
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": null
+      }
+    },
+    "xai/grok-4.6": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "xai/grok-4.6",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "xai/grok-4.6 (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": null,
+        "medium": "medium",
+        "minimal": null,
+        "off": null,
+        "xhigh": "xhigh"
+      }
+    },
+    "xiaomi/mimo-v2.5": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "xiaomi/mimo-v2.5",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 65536,
+      "name": "xiaomi/mimo-v2.5 (Command Code)",
+      "provider": "commandcode",
+      "reasoning": false
+    },
+    "z-ai/glm-5.3-flash": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "z-ai/glm-5.3-flash",
+      "input": [
+        "text",
+        "image"
+      ],
+      "maxTokens": 131,
+      "name": "z-ai/glm-5.3-flash (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": "max",
+        "medium": null,
+        "minimal": null,
+        "off": null,
+        "xhigh": null
+      }
+    },
+    "zai-org/GLM-5.2": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "zai-org/GLM-5.2",
+      "input": [
+        "text"
+      ],
+      "maxTokens": 65536,
+      "name": "zai-org/GLM-5.2 (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": null,
+        "max": "max",
+        "medium": null,
+        "minimal": null,
+        "off": null,
+        "xhigh": null
+      }
+    },
+    "zai-org/GLM-5.3": {
+      "api": "openai-completions",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "compat": {
+        "maxTokensField": "max_tokens",
+        "supportsDeveloperRole": false,
+        "supportsStore": false
+      },
+      "contextWindow": 1000000,
+      "id": "zai-org/GLM-5.3",
+      "input": [
+        "text"
+      ],
+      "maxTokens": 65536,
+      "name": "zai-org/GLM-5.3 (Command Code)",
+      "provider": "commandcode",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "high": "high",
+        "low": "low",
+        "max": "max",
+        "medium": null,
+        "minimal": null,
+        "off": null,
+        "xhigh": null
+      }
+    }
+  }
+}

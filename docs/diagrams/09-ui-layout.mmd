@@ -1,0 +1,17 @@
+%% Aiden TUI component tree (first build target). See design/aiden-ui-spec.md.
+flowchart TB
+    T["Terminal"] --> APP["aiden/tui core"]
+    APP --> RED["event reducer"]
+    RED --> HDR["Header: model,<br/>harness_version"]
+    RED --> MAIN["Timeline"]
+    RED --> SIDE["Right rail"]
+    RED --> FOOT["Editor +<br/>queue indicator"]
+    MAIN --> M1["markdown · tool card<br/>diff card · compaction"]
+    MAIN --> M5["LEARNING card:<br/>evidence, edits,<br/>rollback"]
+    SIDE --> R1["context meter ·<br/>cost HUD ·<br/>agent tree ·<br/>ledger + probes"]
+    APP --> MOD["Modal layer"]
+    MOD --> PB["permission prompt<br/>renders the REAL diff"]
+    classDef learn fill:#2d1b45,stroke:#a855f7,color:#f5d0fe
+    classDef ui fill:#12233b,stroke:#38bdf8,color:#e0f2fe
+    class M5,R1 learn
+    class MOD,PB ui

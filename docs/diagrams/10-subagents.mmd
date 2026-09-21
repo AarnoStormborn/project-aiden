@@ -1,0 +1,19 @@
+%% Delegation contract: admission returns a handle, answers arrive as messages. Expect width.
+sequenceDiagram
+    participant P as Parent model
+    participant H as Host (L7)
+    participant K as Child runtime
+    participant M as Provider
+    P->>H: spawn("review API", name="api")
+    H->>H: check RLM_DEPTH < MAX (default 2)
+    H->>K: create child AgentSession + session_dir
+    H-->>P: handle {id, name, session_dir, model}
+    Note over P: admission only - the answer NEVER comes back here
+    P->>H: spawn("review tests", name="tests")
+    H-->>P: handle  (fan out, then END THE TURN)
+    K->>M: child loop streams independently
+    M-->>K: response / tool calls
+    K->>H: agent_message.send(msg, receiver_role=parent)
+    H-->>P: arrives as an ordinary message, next turn
+    H->>H: child_usage_attributed -> parent assistant turn
+    Note over H: tree view subtracts it: own-context vs billable both reconcile

@@ -1,0 +1,18 @@
+%% Two mechanisms only: cap at ingest, compact at request time.
+flowchart TB
+    R["tool result"] --> C1{"> 16 KB or 400 lines?"}
+    C1 -- yes --> SPILL["write full output to file<br/>return head/tail + path<br/>+ 'use offset=N to continue'"]
+    C1 -- no --> KEEP["keep verbatim"]
+    SPILL --> EST
+    KEEP --> EST["estimate tokens<br/>4 chars/token · 4800/image"]
+    EST --> Q{"ctx > window - reserve<br/>reserve = 16 384"}
+    Q -- no --> SEND(["send to model"])
+    Q -- yes --> CUT["cut point: walk back to keep_recent (20 000)<br/>NEVER split a tool_call from its tool_result"]
+    CUT --> SUM["LLM summary with schema:<br/>Goal · Constraints · Progress done/active/blocked<br/>Decisions · Next steps · Files touched<br/>previous summary passed as iterative context"]
+    SUM --> ENTRY["append CompactionEntry<br/>{summary, first_kept_entry_id, retained_tail?,<br/>usage, tokens_before}"]
+    ENTRY --> REBUILD["build_context_entries()<br/>leaf to root, honouring compaction"]
+    REBUILD --> SEND
+    SEND -. "provider 413 overflow" .-> OF["compact_then_retry (once)"]
+    OF --> CUT
+    classDef danger fill:#3b1d1d,stroke:#f87171,color:#fecaca
+    class OF danger

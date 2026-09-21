@@ -1,0 +1,68 @@
+[project]
+name = "project-aiden"
+version = "0.1.0"
+description = "Aiden — a learning-oriented coding + research agent harness"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28",
+]
+
+[project.scripts]
+aiden = "aiden.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["aiden", "tests", "scripts"]
+
+[tool.ruff.lint]
+# E/F = pycodestyle+pyflakes, I = import order, UP = pyupgrade, B = bugbear,
+# SIM = simplify, RUF = ruff-specific, ASYNC = async pitfalls, S = bandit rules.
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "ASYNC", "S"]
+ignore = [
+    "E501",   # line length is enforced by the formatter, not the linter
+    "S101",   # assert is correct in tests
+    "S311",   # random is fine for retry jitter, not crypto
+    "B008",   # function calls in argument defaults are idiomatic here
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "SIM"]
+"scripts/**" = ["S", "T201"]  # scripts print by design
+
+[tool.ruff.lint.isort]
+known-first-party = ["aiden"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["aiden"]
+# Start permissive on annotations and tighten as layers land; the self-update gate
+# (docs/architecture/aiden-architecture.md §4.5) requires mypy to be meaningful, so
+# unused ignores and untyped-def bodies are checked from day one.
+check_untyped_defs = true
+no_implicit_optional = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unreachable = true
+ignore_missing_imports = true
+show_error_codes = true
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["aiden"]

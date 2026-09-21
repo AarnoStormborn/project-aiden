@@ -1,0 +1,26 @@
+%% Aiden's continual learning: two loops over one trajectory.
+flowchart TB
+    ACT["agent acts: tools, edits, tests"] --> TR["transcript tree (append-only)"]
+    TR --> ASM["assemble next request:<br/>base prompt + L3 projection"]
+    ASM --> ACT
+    TR -->|"window every F turns<br/>after warm-up W"| GATE{"GATE model<br/>should_refine?"}
+    GATE -- no --> DROP([discard])
+    GATE -- yes --> WRITER["WRITER model<br/>JSON only: edits[]"]
+    WRITER --> VAL["validate at APPLY time<br/>proposal is untrusted"]
+    VAL --> APPLY["apply at turn boundary<br/>CRUD only, no body rewrite"]
+    APPLY --> LED[("harness_state.json<br/>prompt memory<br/>skill subagent<br/>versioned + evidence")]
+    LED --> EV["RefinementEvent<br/>snapshots before/after"]
+    EV --> GATE2{"EVAL GATE<br/>3 seeds vs baseline"}
+    GATE2 -- regression --> RB["rollback + quarantine"]
+    GATE2 -- ok --> KEEP["keep, bump version"]
+    KEEP --> ASM
+    RB --> ASM
+    TR -->|"idle / session end"| CONS["CONSOLIDATE<br/>merge, supersede,<br/>decay, prune"]
+    CONS --> DIARY[("DREAMS.md<br/>human review")]
+    CONS --> LED
+    LED -->|probes: invoked, productive| PRUNE["delete what<br/>is never used"]
+    PRUNE --> LED
+    classDef learn fill:#2d1b45,stroke:#a855f7,color:#f5d0fe
+    classDef danger fill:#3b1d1d,stroke:#f87171,color:#fecaca
+    class LED,EV,CONS,PRUNE learn
+    class RB danger

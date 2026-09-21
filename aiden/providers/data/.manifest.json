@@ -1,0 +1,12 @@
+{
+  "generatedAt": "2026-09-21T12:03:05.980983+00:00",
+  "source": "/Users/harshsingh/.nvm/versions/node/v24.12.0/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/providers/data",
+  "generator": "scripts/sync_catalog.py",
+  "note": "pi-ai generated catalog vendored verbatim; commandcode derived locally.",
+  "commandcode": {
+    "apiBase": "https://api.commandcode.ai/provider/v1",
+    "anthropicBase": "https://api.commandcode.ai/provider",
+    "provenance": "parsed 65 models from /Users/harshsingh/.pi/agent/npm/node_modules/pi-commandcode-provider/src/commandcode-catalog.ts",
+    "rule": "claude-* use anthropic-messages, all others openai-completions"
+  }
+}

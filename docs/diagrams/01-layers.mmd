@@ -1,0 +1,21 @@
+%% Aiden layer stack. Vertical = call direction; L9 cuts across.
+flowchart TB
+    subgraph STACK[""]
+        direction TB
+        L8["<b>L8 PRESENTATION</b> · aiden/tui core · event reducer · diff + permission UI"]
+        L7["<b>L7 DELEGATION</b> · spawn(name, task, ctx) · child registry · mailbox"]
+        L6["<b>L6 PERSISTENCE</b> · append-only entry tree (JSONL) · fork / resume / rewind"]
+        L5["<b>L5 CONTEXT</b> · estimator · ingest caps · spill-to-file · compaction"]
+        L4["<b>L4 TOOLS</b> · registry · pydantic validate · policy · execute (par | seq)"]
+        L3["<b>L3 LOOP</b> · frozen TurnState · steering + follow-up · recovery paths"]
+        L2["<b>L2 ASSEMBLY</b> · immutable base prompt + supplemental harness state"]
+        L1["<b>L1 TRANSPORT</b> · provider adapters · streaming · retry · usage (never raises)"]
+        L0["<b>L0 ENVIRONMENT</b> · cwd · git · shell · fs · trust · config"]
+        L8 --> L7 --> L6 --> L5 --> L4 --> L3 --> L2 --> L1 --> L0
+    end
+    L9["<b>L9 ACCOUNTING</b> (cross-cutting) · per-entry usage incl. cache read/write<br/>per-tool cost · child attribution · harness_version + state_hash"]
+    L8 -. emits events .-> L9
+    L3 -. emits events .-> L9
+    L4 -. emits events .-> L9
+    classDef hot fill:#1a1030,stroke:#a855f7,color:#e9d5ff
+    class L2,L5 hot
