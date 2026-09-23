@@ -122,6 +122,7 @@ class AidenSession:
         read_input: Callable[[str], str | None] | None = None,
         write: Callable[[str], None] | None = None,
         keymap: Keymap | None = None,
+        resume: Path | None = None,
     ) -> None:
         self.suite = suite or ProviderSuite.load()
         self.cwd = (cwd or Path.cwd()).resolve()
@@ -133,6 +134,40 @@ class AidenSession:
         self._write = write or print
         self.state = SessionState(model=self.model_ref, max_turns=max_turns or config.MAX_TURNS)
         self.store = SessionStore.create(cwd=self.cwd, model=self.model_ref)
+        self.resume_path = resume
+        if resume is not None:
+            # Resuming keeps writing to the same log, so the transcript stays one story rather
+            # than forking into a second file the user has to reconcile.
+            self._load_resume(resume)
+
+    def _load_resume(self, path: Path) -> None:
+        """Reopen a recorded session: replay it visibly, then continue the same log."""
+        from .replay import events_from_session, questions_from_session
+
+        for event in events_from_session(path):
+            self.driver.emit(event)
+        for question in questions_from_session(path):
+            previous = self._answers.get(question, "")
+            self.state.history.append((question, previous))
+        self.store = SessionStore.open(path)
+
+    @property
+    def _answers(self) -> dict[str, str]:
+        """Answers recorded in the resumed log, keyed by question, for `/transcript`."""
+        answers: dict[str, str] = {}
+        if self.resume_path is None:
+            return answers
+        from ..session import ENTRY_ASSISTANT, read_entries
+
+        last_question = ""
+        for entry in read_entries(self.resume_path):
+            if entry.type == "user_message":
+                last_question = entry.payload.get("text", "")
+            elif entry.type == ENTRY_ASSISTANT and last_question:
+                text = entry.payload.get("text", "")
+                if text:
+                    answers[last_question] = text
+        return answers
 
     # ------------------------------------------------------------------ io
 

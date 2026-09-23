@@ -28,6 +28,11 @@ def build_parser() -> argparse.ArgumentParser:
     show.add_argument("--cwd", type=Path, default=None)
     show.add_argument("--json", action="store_true", help="raw entries as JSON lines")
     show.add_argument("--tools", action="store_true", help="include tool results in full")
+    show.add_argument(
+        "--render",
+        action="store_true",
+        help="replay through the TUI renderer, exactly as it looked live",
+    )
     return parser
 
 
@@ -68,6 +73,15 @@ def cmd_show(args: argparse.Namespace) -> int:
             print(f"error: no session matching '{args.session}'", file=sys.stderr)
             return 1
         path = Path(matches[0]["path"])
+
+    if args.render:
+        from ..tui.driver import TUIDriver
+        from ..tui.replay import events_from_session
+
+        driver = TUIDriver()
+        for event in events_from_session(path):
+            driver.emit(event)
+        return 0
 
     entries = list(read_entries(path))
     if args.json:

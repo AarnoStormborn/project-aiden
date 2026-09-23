@@ -21,7 +21,8 @@ mainstream harnesses do not:
 | **v0.1 harness — read code, answer questions** | **done — acceptance 5/5, ~$0.015 per 5 questions** |
 | **TUI — inline streaming renderer** | **done, snapshot-tested, perf budget enforced** |
 | **TUI — interactive session + keymap** | **done — `aiden tui`, `/` commands, configurable chords** |
-| TUI overlays (review, transcript pager, sessions, approval) | next |
+| **TUI — markdown rendering, session replay, resume** | **done — `--render`, `--resume <id>`** |
+| TUI overlays (alt-screen review, transcript pager, approval) | next |
 
 ## Quick start
 
@@ -47,6 +48,8 @@ uv run aiden providers show opencode-go
 # what did past runs do?
 uv run python -m aiden sessions list
 uv run python -m aiden sessions show <session-id> --tools
+uv run python -m aiden sessions show <session-id> --render   # replay through the TUI
+uv run python -m aiden tui --resume <session-id>             # reopen and continue it
 ```
 
 > **macOS note.** `uv sync` writes editable-install `.pth` files with the BSD `UF_HIDDEN` flag

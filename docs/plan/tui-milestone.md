@@ -158,6 +158,22 @@ expects) because the prefix stripping used the *search root*, which fails when t
 and the wrap-up notice fired on turn 1 of a short run, telling the agent to answer before it had
 read anything.
 
+## Session replay and resume
+
+The architecture claims the transcript is a *projection* of the session log. `aiden/tui/replay.py`
+tests that claim: it converts log entries back into the event stream the driver already renders, so
+a recorded run looks the same on replay as it did live.
+
+    aiden sessions show <id> --render    # replay a recorded session through the renderer
+    aiden tui --resume <id>              # reopen it, see the history, and continue the same file
+
+`--resume` writes back to the original log rather than forking a second one, so the session stays
+one story. It also seeds `/transcript`, which reads the recorded answers back out of the log.
+
+One ordering bug was found here: replay emitted an assistant message's tool calls *before* its
+text, so the prose landed after the tool cell and read as if the model only spoke once it had seen
+the result. Reconstruction now goes reasoning → prose → action.
+
 ## Still not built
 
 - **Alt-screen overlays**: `review`, `transcript` pager, `sessions`, approval prompts. The
@@ -168,8 +184,16 @@ read anything.
 - **Syntax highlighting off the main thread**: `render.syntax_block` exists and is unused; the
   worker-thread discipline is specified but not wired, so code fences in answers are wrapped but
   not highlighted.
-- **Session resume in the UI**: `aiden sessions show` prints a transcript and the reducer could
-  replay a log into cells, but `aiden tui --resume <id>` does not exist yet.
+- **Alt-screen overlays for `review` and an interactive transcript pager**: `/transcript` and
+  `/sessions` print inline rather than opening a scrollable alt-screen view with search.
+- **Approval prompts**: there is nothing to approve yet (no write tools), so the UI for it is
+  designed but unimplemented.
+- **Mouse, Kitty keyboard protocol, OSC 8 hyperlinks**: capability probe and degradation. File
+  paths in tool output are plain text, not clickable.
+- **`render.syntax_block` is still unused.** Markdown code fences *are* highlighted now (rich does
+  it inside `markdown_block`, with `code_theme`), but standalone `syntax_block` is dead code: it
+  was written for highlighting raw file contents in tool output, where the `read` tool's line
+  numbers would need stripping first.
 
 ## Open questions
 

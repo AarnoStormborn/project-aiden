@@ -26,6 +26,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-turns", type=int, default=config.MAX_TURNS)
     parser.add_argument("--max-cost", type=float, default=config.MAX_RUN_COST_USD, dest="max_cost")
     parser.add_argument("--show-thinking", action="store_true", help="print reasoning text")
+    parser.add_argument(
+        "--resume",
+        metavar="SESSION",
+        default=None,
+        help="reopen a recorded session id (or a path to its .jsonl) and continue it",
+    )
     return parser
 
 
@@ -45,7 +51,22 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: --cwd is not a directory: {cwd}", file=sys.stderr)
         return 2
 
+    from ..session import list_sessions
     from ..tui.driver import TUIDriver
+
+    resume_path: Path | None = None
+    if args.resume:
+        candidate = Path(args.resume)
+        if candidate.is_file():
+            resume_path = candidate
+        else:
+            matches = [
+                row for row in list_sessions(cwd) if row["session_id"].startswith(args.resume)
+            ]
+            if not matches:
+                print(f"error: no session matching {args.resume!r}", file=sys.stderr)
+                return 1
+            resume_path = Path(matches[0]["path"])
 
     driver = TUIDriver(theme=Theme.from_env(), show_thinking=args.show_thinking)
     session = AidenSession(
@@ -54,6 +75,7 @@ def main(argv: list[str] | None = None) -> int:
         max_turns=args.max_turns,
         max_cost_usd=args.max_cost,
         driver=driver,
+        resume=resume_path,
     )
     try:
         return asyncio.run(session.run())
