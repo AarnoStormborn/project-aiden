@@ -25,6 +25,9 @@ from __future__ import annotations
 
 import shutil
 import sys
+import time
+from dataclasses import dataclass
+from math import ceil
 from typing import IO
 
 from ..events import (
@@ -79,6 +82,10 @@ class TUIDriver:
         self._assistant_lines: dict[int, int] = {}
         self._frames = 0
         self._bytes = 0
+        #: Seconds spent producing each frame. The spec budgets frame *time* (p50 ≤ 3 ms,
+        #: p99 ≤ 8 ms steady state), which cannot be checked by counting output bytes — a frame
+        #: can be small and still slow if rendering is wasteful.
+        self._frame_seconds: list[float] = []
 
     # ------------------------------------------------------------------ sink
 
@@ -131,8 +138,17 @@ class TUIDriver:
     # ------------------------------------------------------------------ rendering
 
     def _tick(self) -> None:
+        """Produce one frame and record how long it took.
+
+        The timer covers everything attributable to the frame: commit decisions, cell rendering
+        and the write plan. It excludes the actual terminal write, because that is I/O the
+        process does not control and would make the budget depend on the user's tty.
+        """
+        started = time.perf_counter()
         self._commit_ready()
-        self._emit(self.region.plan(self._live_lines()))
+        payload = self.region.plan(self._live_lines())
+        self._frame_seconds.append(time.perf_counter() - started)
+        self._emit(payload)
 
     def _commit_ready(self) -> None:
         """Write everything that is final into real scrollback, exactly once."""
@@ -230,6 +246,10 @@ class TUIDriver:
         """Frame/byte counters, so the perf budget is measurable in tests."""
         return {"frames": self._frames, "bytes": self._bytes, "width": self.width}
 
+    def frame_latency(self) -> FrameLatency:
+        """Frame-time distribution, for the perf budget (spec §Perf budget)."""
+        return FrameLatency.from_seconds(self._frame_seconds)
+
 
 #: No-op context manager so call sites do not branch on whether the TUI is active.
 #:
@@ -247,3 +267,50 @@ class InterruptGuard:
 
     def __exit__(self, *exc: object) -> None:
         return None
+
+
+@dataclass(slots=True)
+class FrameLatency:
+    """Frame-time distribution in milliseconds.
+
+    ``p50``/``p99`` use nearest-rank on the sorted samples, which is honest for the small sample
+    counts a short run produces (a percentile estimate from 12 frames is a hint, not a
+    measurement, and the spec's own budget work assumes a replay harness with many frames).
+    """
+
+    count: int = 0
+    p50_ms: float = 0.0
+    p99_ms: float = 0.0
+    max_ms: float = 0.0
+    total_ms: float = 0.0
+
+    @classmethod
+    def from_seconds(cls, samples: list[float]) -> FrameLatency:
+        if not samples:
+            return cls()
+        ordered = sorted(samples)
+        return cls(
+            count=len(ordered),
+            p50_ms=_percentile(ordered, 0.50) * 1000,
+            p99_ms=_percentile(ordered, 0.99) * 1000,
+            max_ms=ordered[-1] * 1000,
+            total_ms=sum(ordered) * 1000,
+        )
+
+    def meets(self, *, p50_ms: float, p99_ms: float) -> bool:
+        """Whether the run stayed inside the spec's steady-state budget."""
+        return self.p50_ms <= p50_ms and self.p99_ms <= p99_ms
+
+    def render(self) -> str:
+        if not self.count:
+            return "no frames"
+        return (
+            f"{self.count} frames · p50 {self.p50_ms:.2f}ms · p99 {self.p99_ms:.2f}ms · "
+            f"max {self.max_ms:.2f}ms"
+        )
+
+
+def _percentile(ordered: list[float], fraction: float) -> float:
+    """Nearest-rank percentile over an already-sorted list."""
+    index = min(len(ordered) - 1, max(0, ceil(fraction * len(ordered)) - 1))
+    return ordered[index]
