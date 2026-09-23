@@ -110,21 +110,37 @@ Every item below was invisible in tests and obvious within seconds on screen.
 | render deterministically | same events → identical frames (asserted) |
 | frames fit their width | no line exceeds the frame width at 80/94/120 (asserted) |
 
-## Deliberately not built yet
+## Interactive session (aiden/tui/repl.py, keys.py)
 
-These are the next milestone, and they attach at the same seam without touching the reducer:
+`aiden tui` opens a session: ask, follow up, `/help`, `/model`, `/turns`, `/cost`,
+`/transcript`, `/sessions`, `/keys`, `/clear`, `/quit`. Slash commands are handled locally, so a
+typo never becomes a billed request.
 
-- **Raw-mode input**: the editor, the namespaced keymap (`keys.py`), mode chips, steering queue.
-  Today the question comes from `argv`.
-- **Alt-screen overlays**: `review`, `transcript`, `sessions`, approval prompts. `AltScreen`
-  discipline (transient, prints its document back on exit) is specified but unimplemented.
+The keymap (`keys.py`) is pi-shaped: **actions are names** (`thinking.toggle`), never keys, with
+several chords each, overridable from `~/.aiden/keys.toml`, and an *explicit* precedence rule —
+context-local bindings shadow global ones, which is how `Ctrl+P` stays editor history in the prompt
+while `Ctrl+D` quits everywhere. `conflicts()` reports chords bound twice in one context rather
+than silently letting the last registration win, and `essential_actions_present()` refuses to let
+a config unbind quit or interrupt. Chords are normalized so `Ctrl+O`, `ctrl+o`, `o+ctrl`, `esc`
+and `escape` are one binding.
+
+Deliberate scope: **input happens between runs, not during one.** While a run streams, the prompt
+is not reading, so the live region owns the cursor and there is no contention. Steering a run
+mid-flight needs the editor and driver coordinated through `patch_stdout`; claiming it now would
+mean an input path that silently drops keystrokes.
+
+## Still not built
+
+- **Alt-screen overlays**: `review`, `transcript` pager, `sessions`, approval prompts. The
+  `AltScreen` discipline (transient, prints its document back on exit) is specified but the
+  overlays themselves are not implemented; `/transcript` and `/sessions` currently print inline.
+- **Steering a run mid-flight** (`send`/`follow_up` semantics), including the queue UI.
 - **Mouse, Kitty keyboard protocol, OSC 8 hyperlinks**: capability probe and degradation.
-- **A pty-based perf harness**: the byte/frame counters exist, but the spec's p50/p99 frame-time
-  budgets need a real terminal. Current numbers are output-size only.
 - **Syntax highlighting off the main thread**: `render.syntax_block` exists and is unused; the
-  worker-thread discipline is specified but not wired.
-- **Session resume in the UI**: `aiden sessions show` prints a transcript, but the TUI cannot
-  reopen one yet, even though the reducer is already capable of replaying a log.
+  worker-thread discipline is specified but not wired, so code fences in answers are wrapped but
+  not highlighted.
+- **Session resume in the UI**: `aiden sessions show` prints a transcript and the reducer could
+  replay a log into cells, but `aiden tui --resume <id>` does not exist yet.
 
 ## Open questions
 

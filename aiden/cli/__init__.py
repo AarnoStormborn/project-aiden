@@ -7,12 +7,13 @@ import sys
 USAGE = """aiden <command> [args]
 
 commands:
-  ask "question"   ask a question about the current repository (v0.1 harness)
+  tui              interactive session in the terminal (needs a tty)
+  ask "question"   ask one question and exit
   providers        inspect, authenticate and refresh the provider suite
   sessions         list recorded sessions for this project
   version          print the Aiden version
 
-Run `aiden ask --help` or `aiden providers --help` for details."""
+Run `aiden tui --help`, `aiden ask --help` or `aiden providers --help` for details."""
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -26,6 +27,10 @@ def main(argv: list[str] | None = None) -> int:
         from .providers import main as providers_main
 
         return providers_main(rest)
+    if command == "tui":
+        from .tui import main as tui_main
+
+        return tui_main(rest)
     if command == "ask":
         from .ask import main as ask_main
 

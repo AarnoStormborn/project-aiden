@@ -48,6 +48,7 @@ ignore = [
 # ambiguous-character rules would rewrite the design. render.py draws the same glyphs.
 "aiden/tui/theme.py" = ["RUF001", "RUF002", "RUF003"]
 "aiden/tui/render.py" = ["RUF001", "RUF002", "RUF003"]
+"aiden/tui/repl.py" = ["RUF001"]  # the prompt glyph
 # the theme test asserts on the exact glyphs the theme must produce
 "tests/tui/test_theme.py" = ["RUF001"]
 # S106/S107 are false positives on `token=`/`style_token=` parameters, which name a theme

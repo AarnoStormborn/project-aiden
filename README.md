@@ -19,8 +19,9 @@ mainstream harnesses do not:
 | Architecture + ADRs (`docs/architecture/`) | done |
 | **Provider suite** (`aiden/providers/`) | **done — 42 providers, 3 wire protocols, live-verified** |
 | **v0.1 harness — read code, answer questions** | **done — acceptance 5/5, ~$0.015 per 5 questions** |
-| **TUI — inline streaming renderer** | **core done, snapshot-tested — see `docs/plan/tui-milestone.md`** |
-| TUI input/overlays (keymap, review, sessions) | next |
+| **TUI — inline streaming renderer** | **done, snapshot-tested, perf budget enforced** |
+| **TUI — interactive session + keymap** | **done — `aiden tui`, `/` commands, configurable chords** |
+| TUI overlays (review, transcript pager, sessions, approval) | next |
 
 ## Quick start
 
@@ -29,7 +30,10 @@ uv sync
 uv run python scripts/dev_setup.py  # macOS: clears the hidden flag uv puts on .pth files
 uv run python -m pytest -q          # 151 tests, no network
 
-# ask a question about this repository (inline TUI when stdout is a terminal)
+# interactive session (needs a tty): ask, follow up, /help, /model, /quit
+uv run python -m aiden tui
+
+# one question and exit (inline TUI when stdout is a terminal)
 uv run python -m aiden ask "what are the tool output budgets, and where are they defined?"
 uv run python -m aiden ask --tui off "..."   # linear output, for pipes and screen readers
 
@@ -57,6 +61,7 @@ Live checks (spend money, need network):
 uv run python scripts/smoke_providers.py   # one call per provider
 uv run python scripts/smoke_tools.py       # full tool round-trip per provider
 uv run python scripts/acceptance_v01.py    # the five-question v0.1 acceptance suite
+uv run python scripts/bench_tui.py --assert-budget   # TUI frame-time budget (no network)
 ```
 
 ## Configuration
@@ -83,6 +88,7 @@ overrides:
 | `AIDEN_NO_COLOR` / `NO_COLOR` | unset | monochrome |
 | `AIDEN_SYNC` | on | set `0` if a terminal breaks on `CSI ?2026` |
 | `AIDEN_ANIMATIONS` | auto | set `off` to disable spinners |
+| `AIDEN_KEYS_FILE` | `$AIDEN_HOME/keys.toml` | keymap overrides |
 
 Sessions live in `~/.aiden/sessions/--<project-path>--/` — deliberately outside the repo so
 transcripts can never be committed. `providers.toml` is gitignored because it can hold keys.

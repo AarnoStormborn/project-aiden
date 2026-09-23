@@ -1,0 +1,359 @@
+"""Interactive session: a prompt, a run, repeat.
+
+`aiden ask` answers one question and exits. This makes the TUI a *session*: read a question, stream
+the run inline, then read the next one, with the transcript accumulating in scrollback.
+
+Deliberate scope:
+
+- **Input happens between runs, not during one.** While a run streams, the prompt is not reading,
+  so the live region owns the screen and there is no contention over the cursor. Steering a run
+  mid-flight is the next feature and needs the editor and the driver coordinated through
+  ``patch_stdout``; pretending to support it now would mean an input path that silently drops
+  keystrokes.
+- **Commands are local.** A leading ``/`` is handled here, never sent to the model, so a typo in a
+  command cannot become a billed request.
+
+Command parsing is pure and separately tested; the input source is injectable, so the loop can be
+driven without a terminal.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+from .. import config
+from ..loop import LoopResult, run_loop
+from ..providers import ProviderSuite
+from ..session import SessionStore, list_sessions
+from .driver import TUIDriver
+from .keys import Keymap
+
+PROMPT = "› "
+CONTINUATION = "  "
+
+HELP_TEXT = """\
+aiden — interactive session
+
+  /help              this text
+  /model [ref]       show or set the model (provider/model[:thinking])
+  /turns N           set the turn ceiling for the next question
+  /cost              spend so far this session
+  /transcript        reprint this session's questions and answers
+  /sessions          list recorded sessions for this project
+  /keys              show the key bindings
+  /clear             forget the in-session transcript (does not delete the log)
+  /quit              leave (also Ctrl-D)
+
+Anything else is sent to the model. Ctrl-C interrupts a running turn."""
+
+
+@dataclass(slots=True)
+class Command:
+    """A parsed local command."""
+
+    name: str
+    argument: str = ""
+
+    @property
+    def known(self) -> bool:
+        return self.name in COMMANDS
+
+
+COMMANDS = {
+    "help",
+    "model",
+    "turns",
+    "cost",
+    "transcript",
+    "sessions",
+    "keys",
+    "clear",
+    "quit",
+    "exit",
+}
+
+
+def parse_command(line: str) -> Command | None:
+    """Parse a local command, or ``None`` when the line is a question.
+
+    Only a leading ``/`` counts. A question containing a slash (a path, a URL) is not a command,
+    and an empty line is not one either.
+    """
+    stripped = line.strip()
+    if not stripped.startswith("/"):
+        return None
+    body = stripped[1:].strip()
+    if not body:
+        return None
+    name, _, argument = body.partition(" ")
+    name = name.lower()
+    if name == "exit":
+        name = "quit"
+    return Command(name=name, argument=argument.strip())
+
+
+@dataclass
+class SessionState:
+    """Everything that persists across questions in one interactive session."""
+
+    model: str = ""
+    max_turns: int = 0
+    spent_usd: float = 0.0
+    turns_used: int = 0
+    tool_calls: int = 0
+    history: list[tuple[str, str]] = field(default_factory=list)
+
+
+class AidenSession:
+    """The interactive loop. Input and output are injectable for testing."""
+
+    def __init__(
+        self,
+        *,
+        suite: ProviderSuite | None = None,
+        cwd: Path | None = None,
+        model: str | None = None,
+        max_turns: int | None = None,
+        max_cost_usd: float | None = None,
+        driver: TUIDriver | None = None,
+        read_input: Callable[[str], str | None] | None = None,
+        write: Callable[[str], None] | None = None,
+        keymap: Keymap | None = None,
+    ) -> None:
+        self.suite = suite or ProviderSuite.load()
+        self.cwd = (cwd or Path.cwd()).resolve()
+        self.model_ref = model or config.DEFAULT_MODEL
+        self.max_cost_usd = max_cost_usd if max_cost_usd is not None else config.MAX_RUN_COST_USD
+        self.keymap = keymap or Keymap.load(_keymap_path())
+        self.driver = driver or TUIDriver()
+        self._read = read_input
+        self._write = write or print
+        self.state = SessionState(model=self.model_ref, max_turns=max_turns or config.MAX_TURNS)
+        self.store = SessionStore.create(cwd=self.cwd, model=self.model_ref)
+
+    # ------------------------------------------------------------------ io
+
+    async def _read_line(self, prompt: str = PROMPT) -> str | None:
+        if self._read is not None:
+            return self._read(prompt)
+        return await _prompt_toolkit(prompt, self.state.history)
+
+    def _say(self, text: str) -> None:
+        self._write(text)
+
+    # ------------------------------------------------------------------ loop
+
+    async def run(self) -> int:
+        """Read questions until EOF or /quit. Returns a process exit code."""
+        self._say(f"aiden · {self.state.model} · {self.cwd}")
+        self._say("type /help for commands, Ctrl-C to interrupt a turn, Ctrl-D to leave\n")
+
+        while True:
+            try:
+                line = await self._read_line()
+            except (EOFError, KeyboardInterrupt):
+                return self._leave()
+            if line is None:
+                return self._leave()
+            if not line.strip():
+                continue
+
+            command = parse_command(line)
+            if command is not None:
+                if command.name in ("quit",):
+                    return self._leave()
+                self._handle_command(command)
+                continue
+
+            try:
+                await self._ask(line)
+            except (EOFError, KeyboardInterrupt):
+                # Interrupting a turn returns to the prompt; the driver has already committed the
+                # partial answer and marked it aborted.
+                self._say("interrupted")
+
+    async def _ask(self, question: str) -> LoopResult:
+        result = await run_loop(
+            question,
+            suite=self.suite,
+            model=self.state.model,
+            cwd=self.cwd,
+            sink=self.driver,
+            session=self.store,
+            max_turns=self.state.max_turns,
+            max_cost_usd=self.max_cost_usd,
+            max_tokens=config.DEFAULT_MAX_TOKENS,
+            thinking_level=config.DEFAULT_THINKING_LEVEL,
+        )
+        self.state.spent_usd += result.cost_usd
+        self.state.turns_used += result.turns
+        self.state.tool_calls += result.tool_calls
+        self.state.history.append((question, result.answer))
+        return result
+
+    # ------------------------------------------------------------------ commands
+
+    def _handle_command(self, command: Command) -> None:
+        if command.name == "help" or not command.known:
+            if not command.known:
+                self._say(f"unknown command /{command.name} — try /help")
+            self._say(HELP_TEXT)
+            return
+
+        if command.name == "model":
+            self._command_model(command.argument)
+        elif command.name == "turns":
+            self._command_turns(command.argument)
+        elif command.name == "cost":
+            self._say(
+                f"spent ${self.state.spent_usd:.4f} · {self.state.turns_used} turns · "
+                f"{self.state.tool_calls} tool calls"
+            )
+        elif command.name == "transcript":
+            self._command_transcript()
+        elif command.name == "sessions":
+            self._command_sessions()
+        elif command.name == "keys":
+            for chord, action in self.keymap.help_rows():
+                self._say(f"  {chord:18} {action}")
+        elif command.name == "clear":
+            self.state.history.clear()
+            self._say("in-session transcript cleared (the session log is untouched)")
+
+    def _command_model(self, argument: str) -> None:
+        if not argument:
+            self._say(f"model: {self.state.model}")
+            return
+        try:
+            resolved = self.suite.registry.resolve(argument)
+        except KeyError as exc:
+            self._say(f"error: {exc}")
+            # A bare provider name is the common mistake ("/model anthropic" instead of
+            # "/model anthropic/claude-sonnet-5"), and the catalogue can answer it directly.
+            if "/" not in argument:
+                example = self._example_model(argument)
+                if example:
+                    self._say(f"did you mean /model {example} ? (a model ref is provider/model)")
+            return
+        self.state.model = argument
+        self._say(f"model: {resolved.model.ref} · thinking {resolved.thinking_level or 'default'}")
+
+    def _example_model(self, provider: str) -> str | None:
+        """First usable model for a provider, for the 'did you mean' hint."""
+        try:
+            models = self.suite.registry.by_provider(provider)
+        except KeyError:
+            return None
+        return models[0].ref if models else None
+
+    def _command_turns(self, argument: str) -> None:
+        if not argument:
+            self._say(f"turn ceiling: {self.state.max_turns}")
+            return
+        try:
+            value = int(argument)
+        except ValueError:
+            self._say(f"error: '{argument}' is not a number")
+            return
+        if not 1 <= value <= 100:
+            self._say("error: the turn ceiling must be between 1 and 100")
+            return
+        self.state.max_turns = value
+        self._say(f"turn ceiling: {value}")
+
+    def _command_transcript(self) -> None:
+        if not self.state.history:
+            self._say("nothing asked yet")
+            return
+        for index, (question, answer) in enumerate(self.state.history, 1):
+            self._say(f"{index}. {question}")
+            for line in (answer or "(no answer)").splitlines():
+                self._say(f"   {line}")
+
+    def _command_sessions(self) -> None:
+        rows = list_sessions(self.cwd)
+        if not rows:
+            self._say("no sessions recorded for this project")
+            return
+        for row in rows[:10]:
+            self._say(
+                f"  {row['session_id']}  {row['entries']:>4} entries  {row['started_at'][:19]}"
+            )
+
+    def _leave(self) -> int:
+        self.driver.finish()
+        self.store.close()
+        self._say(f"\nsession {self.store.path}")
+        return 0
+
+
+def _keymap_path() -> Path | None:
+    import os
+
+    explicit = os.environ.get("AIDEN_KEYS_FILE")
+    if explicit:
+        return Path(explicit)
+    candidate = config.AIDEN_HOME / "keys.toml"
+    return candidate if candidate.is_file() else None
+
+
+_SESSION: Any = None
+_HISTORY_SYNCED = 0
+
+
+def _prompt_session() -> Any:
+    """Build the editor once. Enter submits; Alt-Enter or Ctrl-J inserts a newline."""
+    global _SESSION
+    if _SESSION is None:
+        from prompt_toolkit import PromptSession
+        from prompt_toolkit.history import InMemoryHistory
+        from prompt_toolkit.key_binding import KeyBindings
+
+        bindings = KeyBindings()
+
+        @bindings.add("escape", "enter")
+        def _newline(event: Any) -> None:
+            event.current_buffer.insert_text("\n")
+
+        _SESSION = PromptSession(
+            history=InMemoryHistory(),
+            key_bindings=bindings,
+            multiline=False,
+            # Alt-Enter is the newline chord; keep Enter as submit.
+            enable_open_in_editor=False,
+        )
+    return _SESSION
+
+
+async def _prompt_toolkit(prompt: str, history: list[tuple[str, str]]) -> str | None:
+    """Read one line inside the running loop.
+
+    ``PromptSession.prompt()`` is synchronous and calls ``asyncio.run`` internally, which raises
+    "cannot be called from a running event loop" when invoked from our session coroutine — so this
+    must be the async variant. The failure only appeared when the TUI was actually launched, since
+    the tests inject their own input source.
+    """
+    global _HISTORY_SYNCED
+    session = _prompt_session()
+
+    for question, _answer in history[_HISTORY_SYNCED:]:
+        session.history.append_string(question)
+    _HISTORY_SYNCED = len(history)
+
+    return await session.prompt_async(prompt)
+
+
+def iter_inputs(lines: Iterator[str]) -> Callable[[str], str | None]:
+    """Wrap an iterable of lines as a ``read_input`` callable, for tests and scripts."""
+    iterator = iter(lines)
+
+    def read(_prompt: str = PROMPT) -> str | None:
+        try:
+            return next(iterator)
+        except StopIteration:
+            return None
+
+    return read

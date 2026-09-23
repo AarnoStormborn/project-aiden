@@ -41,7 +41,12 @@ Live, network-and-money checks are opt-in and never part of the test suite:
 uv run python scripts/smoke_providers.py
 uv run python scripts/smoke_tools.py
 uv run python scripts/acceptance_v01.py
+uv run python scripts/bench_tui.py --assert-budget   # frame-time budget, no network
 ```
+
+The TUI's perf budget is enforced in CI by `tests/tui/test_perf.py` (p50 ≤ 3 ms, p99 ≤ 8 ms,
+≤ 2 KB/frame streaming, 0 bytes for an unchanged frame). `scripts/bench_tui.py` reports the
+distribution when you need detail.
 
 The TUI is snapshot-tested: `AIDEN_UPDATE_GOLDEN=1 uv run python -m pytest tests/tui/` rewrites
 the frames in `tests/tui/golden/` at the three widths the spec mandates (80/94/120). Snapshot the
