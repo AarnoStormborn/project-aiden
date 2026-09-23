@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 
+from aiden.providers.types import Usage
 from aiden.tui import golden, render
 from aiden.tui.model import Transcript
 from aiden.tui.theme import Theme
@@ -115,3 +116,163 @@ def test_thinking_is_folded_by_default(theme: Theme):
 
     thinking.collapsed = False
     assert len(render.render_cell(thinking, 94, theme).lines) > 1
+
+
+def test_long_prose_wraps_instead_of_being_clipped(theme: Theme):
+    """Regression: prose was run through the clipping path, so answers ended mid-sentence.
+
+    Assistant text arrives as one long line per markdown block, so clipping mangled every
+    answer that exceeded the terminal width.
+    """
+    from aiden.events import RunFinished, RunStarted, TextDelta
+    from aiden.tui import golden
+
+    paragraph = " ".join(["wording"] * 60)
+    events = [
+        RunStarted(session_id="s", model="m", question="q", cwd="/repo"),
+        TextDelta(text=paragraph),
+        RunFinished(stop_reason="end_turn", turns=1, tool_calls=0, usage=Usage(), cost_usd=0.0),
+    ]
+    lines = golden.frame_from_events(events, 80, theme)
+    body = [line for line in lines if line.strip()]
+
+    # Nothing may be dropped or elided: every word survives across the wrapped lines.
+    assert "wording" * 1 in " ".join(body)
+    joined = " ".join(body)
+    assert joined.count("wording") == 60, "wrapping must not lose text"
+    assert "…" not in joined, "prose must wrap, not clip"
+    for line in lines:
+        assert len(line) <= 80
+
+
+def test_wrapping_preserves_indentation(theme: Theme):
+    from aiden.tui.render import plain_lines
+
+    lines = plain_lines("  indented " * 20, 40, theme)
+    assert len(lines) > 1
+    assert all(line.startswith("  ") for line in lines)
+
+
+def test_tool_output_is_not_a_silent_preview(theme: Theme):
+    """A short preview presented as the whole result is the silent truncation the spec forbids."""
+    from aiden.tui.model import OK, ToolCall
+    from aiden.tui.render import render_cell
+
+    cell = ToolCall(
+        call_id="c1",
+        name="read",
+        status=OK,
+        output="\n".join(f"line {i}" for i in range(30)),
+        duration_ms=1,
+    )
+    body = "\n".join(render_cell(cell, 80, theme).lines)
+    assert "more (e to expand)" in body, "hidden lines must be counted, not hidden silently"
+
+
+def test_tool_output_wraps_so_code_stays_readable(theme: Theme):
+    """A clipped line of file contents tells you a line is missing but not what it said."""
+    from aiden.tui.model import OK, ToolCall
+    from aiden.tui.render import render_cell
+
+    long_line = "def a_function_with_a_long_name(argument_one, argument_two, argument_three):"
+    cell = ToolCall(call_id="c1", name="read", status=OK, output=long_line, duration_ms=1)
+    lines = render_cell(cell, 60, theme).lines
+
+    body = " ".join(line.strip() for line in lines[1:])
+    assert "argument_three" in body, "the tail of the line must survive"
+    assert all(len(line) <= 60 for line in lines)
+    # every wrapped piece keeps the two-column gutter
+    assert all(line.startswith("  ") for line in lines[1:])
+
+
+def test_tool_output_blank_lines_stay_blank(theme: Theme):
+    from aiden.tui.model import OK, ToolCall
+    from aiden.tui.render import render_cell
+
+    cell = ToolCall(call_id="c1", name="read", status=OK, output="a\n\nb", duration_ms=1)
+    lines = render_cell(cell, 40, theme).lines
+    assert "" in lines[1:], "blank lines must not become whitespace-padded gutters"
+
+
+def test_notices_wrap_instead_of_being_clipped(theme: Theme):
+    """A wrapped-up instruction that is cut off is worse than useless."""
+    from aiden.tui.model import Notice
+    from aiden.tui.render import render_cell
+
+    text = "You have 3 turns left before the run is cut off. Stop searching and answer now."
+    lines = render_cell(Notice(text=text, level="info"), 46, theme).lines
+    assert len(lines) > 1
+    assert "answer now" in " ".join(lines)
+    assert all(len(line) <= 46 for line in lines)
+
+
+def test_long_session_path_keeps_the_filename_visible(theme: Theme):
+    from aiden.tui.model import RunSummary
+    from aiden.tui.render import render_cell
+
+    summary = RunSummary(
+        stop_reason="end_turn",
+        turns=1,
+        tool_calls=0,
+        cost_usd=0.001,
+        session_path="/Users/someone/.aiden/sessions/--very-long-project-name--/20260101T000000-abcdef01.jsonl",
+    )
+    body = "\n".join(render_cell(summary, 50, theme).lines)
+    assert "abcdef01.jsonl" in body, "the filename must survive elision"
+
+
+def test_cell_renderers_actually_emit_colour(colour_theme: Theme):
+    """The gap that let a fully monochrome UI ship: only the markdown path was colour-tested.
+
+    The cell renderers called `theme.style(...)`, embedded it in a `rich.Text`, and then read
+    `.plain`, which strips the style. Every cell rendered unstyled while the token table looked
+    correct and `markdown_block` (rendered by rich) passed its colour test.
+    """
+    from aiden.events import (
+        Diagnostic,
+        RunFinished,
+        RunStarted,
+        TextDelta,
+        ToolCallFinished,
+        ToolCallStarted,
+    )
+    from aiden.tui import golden
+
+    events = [
+        RunStarted(session_id="s", model="m", question="q", cwd="/repo"),
+        TextDelta(text="an answer\n"),
+        ToolCallStarted(call_id="c1", name="read", arguments={"path": "a.py"}),
+        ToolCallFinished(
+            call_id="c1",
+            name="read",
+            is_error=False,
+            duration_ms=1,
+            output_chars=5,
+            output="body",
+        ),
+        Diagnostic(message="a warning", level="warning"),
+        RunFinished(stop_reason="end_turn", turns=1, tool_calls=1, usage=Usage(), cost_usd=0.001),
+    ]
+    lines = golden.frame_from_events(events, 80, colour_theme)
+    styled = [line for line in lines if "\x1b[" in line]
+
+    assert len(styled) >= 5, f"expected most cells to be styled, got {len(styled)}"
+    # Distinct tokens must produce distinct codes, or the palette is decorative.
+    codes = {line.split("m", 1)[0] for line in styled}
+    assert len(codes) > 2, f"styling collapsed to {codes}"
+
+
+def test_no_colour_mode_emits_no_escapes_at_all(theme: Theme):
+    """NO_COLOR must yield byte-clean text: golden diffs and screen readers depend on it."""
+    from aiden.events import Diagnostic, RunFinished, RunStarted, TextDelta, ToolCallStarted
+    from aiden.tui import golden
+
+    events = [
+        RunStarted(session_id="s", model="m", question="q", cwd="/repo"),
+        TextDelta(text="text\n"),
+        ToolCallStarted(call_id="c1", name="glob", arguments={}),
+        Diagnostic(message="warning", level="warning"),
+        RunFinished(stop_reason="end_turn", turns=1, tool_calls=0, usage=Usage(), cost_usd=0.0),
+    ]
+    for line in golden.frame_from_events(events, 80, theme):
+        assert "\x1b" not in line, f"escape leaked into a plain frame: {line!r}"

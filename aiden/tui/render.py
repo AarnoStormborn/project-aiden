@@ -13,12 +13,12 @@ per cell; only the tail repaints".
 from __future__ import annotations
 
 import io
+import textwrap
 from dataclasses import dataclass
 
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.syntax import Syntax
-from rich.text import Text
 
 from . import model
 from .theme import Theme
@@ -102,15 +102,16 @@ def _user_prompt(cell: model.UserPrompt, width: int, theme: Theme) -> Rendered:
     marker = theme.glyphs.user
     body = _wrap(cell.text, width - len(GUTTER) - 2)
     # Trailing separation is render_all's job, so cells are spaced uniformly.
-    return Rendered(_guttered(body, theme, first=f"{marker} ", style_token="user_text"), 1)
+    lines = _guttered(body, theme, first=f"{marker} ", style_token="user_text")
+    return Rendered([paint(line, "user_text", theme) for line in lines], 1)
 
 
 def _assistant(cell: model.AssistantText, width: int, theme: Theme) -> Rendered:
     # Streamed text is rendered as plain prose while incomplete: re-parsing markdown on every
     # delta is the expensive path, and the spec requires re-parsing only completed lines.
-    lines = _plain_lines(cell.text, width, theme)
+    lines = [paint(line, "text", theme) for line in _plain_lines(cell.text, width, theme)]
     if cell.status == model.ABORTED:
-        lines.append(f"{GUTTER}{theme.glyphs.error} aborted")
+        lines.append(paint(f"{GUTTER}{theme.glyphs.error} aborted", "error", theme))
     return Rendered(lines, len(lines))
 
 
@@ -119,9 +120,11 @@ def _thinking(cell: model.Thinking, width: int, theme: Theme) -> Rendered:
     tokens = max(1, len(cell.text) // 4)
     header = f"{glyph} thinking · {tokens:,} tok"
     header += f" ({theme.glyphs.expanded})" if not cell.collapsed else " (t to expand)"
-    lines = [Text(header, style=theme.style("thinking_text")).plain]
+    lines = [paint(header, "thinking_text", theme)]
     if not cell.collapsed:
-        lines.extend(_plain_lines(cell.text, width, theme))
+        lines.extend(
+            paint(line, "thinking_text", theme) for line in _plain_lines(cell.text, width, theme)
+        )
     return Rendered(lines, len(lines))
 
 
@@ -139,11 +142,19 @@ def _tool_call(cell: model.ToolCall, width: int, theme: Theme) -> Rendered:
     suffix = ""
     if cell.skipped:
         suffix = "  (skipped: truncated args)"
+    elif cell.status == model.ABORTED:
+        suffix = "  (aborted)"
     elif cell.truncated:
         suffix = "  (output truncated)"
 
+    status_token = {
+        model.OK: "tool_ok",
+        model.ERROR: "tool_err",
+        model.RUNNING: "tool_pending",
+        model.ABORTED: "tool_err",
+    }.get(cell.status, "tool_pending")
     header = f"{glyph} {cell.name}({args}){timing}{suffix}"
-    lines = [_fit(header, width, dot)]
+    lines = [paint(_fit(header, width, dot), status_token, theme)]
 
     if cell.output:
         visible = cell.output.splitlines()
@@ -152,9 +163,17 @@ def _tool_call(cell: model.ToolCall, width: int, theme: Theme) -> Rendered:
             hidden = len(visible) - cell.visible_lines
             visible = visible[: cell.visible_lines]
         for line in visible:
-            lines.append(_fit(f"{GUTTER}{line}", width, dot))
+            lines.extend(
+                paint(piece, "tool_output", theme) for piece in _wrapped(line, GUTTER, width, theme)
+            )
         if hidden:
-            lines.append(f"{GUTTER}{theme.glyphs.ellipsis} {hidden} more (e to expand)")
+            lines.append(
+                paint(
+                    f"{GUTTER}{theme.glyphs.ellipsis} {hidden} more (e to expand)",
+                    "dim",
+                    theme,
+                )
+            )
     return Rendered(lines, len(lines))
 
 
@@ -165,19 +184,21 @@ def _notice(cell: model.Notice, width: int, theme: Theme) -> Rendered:
         "warning": "warning",
         "info": "muted",
     }
-    style = theme.style(tokens.get(cell.level, "muted"))
-    lines = [Text(f"{glyph} {cell.text}", style=style).plain]
-    return Rendered([_fit(line, width, theme.glyphs.ellipsis) for line in lines], 1)
+    token = tokens.get(cell.level, "muted")
+    plain = f"{glyph} {cell.text}"
+    # A harness notice is prose; clipping it would hide the instruction it exists to deliver.
+    lines = [paint(line, token, theme) for line in _wrapped(plain, "", width, theme)]
+    return Rendered(lines, len(lines))
 
 
 def _turn_marker(cell: model.TurnMarker, width: int, theme: Theme) -> Rendered:
     # Spec: horizontal rules only at turn boundaries, and only at >= 100 columns. Below that the
     # label alone carries the boundary and the width is better spent on content.
     if width < 100:
-        return Rendered([f"{theme.glyphs.pending} turn {cell.turn}"], 1)
+        return Rendered([paint(f"{theme.glyphs.pending} turn {cell.turn}", "border", theme)], 1)
     label = f"── turn {cell.turn} "
     rule = label + "─" * max(0, width - len(label) - 1)
-    return Rendered([_fit(rule, width, theme.glyphs.ellipsis)], 1)
+    return Rendered([paint(_fit(rule, width, theme.glyphs.ellipsis), "border", theme)], 1)
 
 
 def _run_summary(cell: model.RunSummary, width: int, theme: Theme) -> Rendered:
@@ -193,11 +214,19 @@ def _run_summary(cell: model.RunSummary, width: int, theme: Theme) -> Rendered:
         parts.append(f"stop {cell.stop_reason}")
 
     dot = theme.glyphs.ellipsis
-    lines = [_fit("  " + " · ".join(parts), width, dot)]
+    lines = [paint(_fit("  " + " · ".join(parts), width, dot), "muted", theme)]
     if cell.error:
-        lines.append(_fit(f"{GUTTER}{theme.glyphs.error} {cell.error}", width, dot))
+        lines.append(
+            paint(_fit(f"{GUTTER}{theme.glyphs.error} {cell.error}", width, dot), "error", theme)
+        )
     if cell.session_path:
-        lines.append(_fit(f"{GUTTER}{cell.session_path}", width, dot))
+        lines.append(
+            paint(
+                f"{GUTTER}{_elide_left(cell.session_path, width - len(GUTTER), dot)}",
+                "dim",
+                theme,
+            )
+        )
     # Final gap so the shell prompt does not butt against the summary.
     lines.append("")
     return Rendered(lines, len(lines))
@@ -207,19 +236,71 @@ def _run_summary(cell: model.RunSummary, width: int, theme: Theme) -> Rendered:
 
 
 def plain_lines(text: str, width: int, theme: Theme) -> list[str]:
-    """Render raw text to fitted lines.
+    """Render streamed **prose** to fitted lines, wrapping rather than clipping.
 
     Public because the driver commits stable stream lines through it: the lines it writes to
-    scrollback must be produced by the same function that would have drawn them live, or the
-    two copies would diverge and text would visibly change as it commits.
+    scrollback must be produced by the same function that would have drawn them live, or the two
+    copies would diverge and text would visibly change as it commits.
+
+    Wrapping is essential here, not cosmetic. Assistant text arrives as one long paragraph per
+    markdown block, and an earlier version clipped it with the generic ``_fit`` — the transcript
+    showed answers ending mid-sentence with a stray ellipsis, which reads as a bug in the model
+    rather than a display choice. Indentation is preserved so lists and code stay readable.
     """
     if not text:
         return []
-    return [_fit(line, width, theme.glyphs.ellipsis) for line in text.splitlines()]
+    out: list[str] = []
+    for line in text.splitlines():
+        if not line.strip():
+            out.append("")
+            continue
+        indent = line[: len(line) - len(line.lstrip())]
+        available = max(1, width - len(indent))
+        pieces = textwrap.wrap(
+            line.strip(),
+            width=available,
+            break_long_words=True,
+            break_on_hyphens=False,
+            replace_whitespace=False,
+        ) or [""]
+        out.extend(indent + piece for piece in pieces)
+    return out
 
 
 # Kept as the internal alias used by the cell renderers.
 _plain_lines = plain_lines
+
+
+def paint(text: str, token: str, theme: Theme) -> str:
+    """Prefix ``text`` with the token's SGR code. No-op when colour is off.
+
+    Per line, not per span: the writer emits a reset at the end of every line, so a line-level
+    prefix is both sufficient and safe against a dropped frame leaking colour.
+    """
+    prefix = theme.ansi(token)
+    return f"{prefix}{text}" if prefix else text
+
+
+def _wrapped(line: str, prefix: str, width: int, theme: Theme) -> list[str]:
+    """Wrap ``line`` to the frame width, prefixing every piece (and continuation) with ``prefix``.
+
+    Tool output is file contents and grep hits, where a clipped line is close to useless: you
+    cannot read the rest of a line of code, and the ellipsis only tells you something is missing.
+    Wrapping keeps the full text on screen and still marks hidden *source* lines separately.
+    """
+    available = width - len(prefix)
+    if available <= 0 or not line.strip():
+        return [""] if not line.strip() else [_fit(f"{prefix}{line}", width, theme.glyphs.ellipsis)]
+
+    indent = line[: len(line) - len(line.lstrip())]
+    pieces = textwrap.wrap(
+        line.strip(),
+        width=max(1, available - len(indent)),
+        break_long_words=True,
+        break_on_hyphens=False,
+        replace_whitespace=False,
+    ) or [""]
+    return [f"{prefix}{indent}{piece}" for piece in pieces]
 
 
 def _guttered(body: str, theme: Theme, *, first: str, style_token: str) -> list[str]:
@@ -251,6 +332,16 @@ def _wrap(text: str, width: int) -> str:
 def _short(value: object, ellipsis: str = "…", limit: int = 44) -> str:
     text = str(value).replace("\n", "\\n")
     return text if len(text) <= limit else text[: limit - 1] + ellipsis
+
+
+def _elide_left(text: str, width: int, ellipsis: str = "…") -> str:
+    """Keep the end of a long path: the filename is the useful part, the prefix is not."""
+    if width <= 0:
+        return ""
+    if len(text) <= width:
+        return text
+    keep = max(0, width - len(ellipsis))
+    return ellipsis + text[-keep:] if keep else ellipsis
 
 
 def _fit(line: str, width: int, ellipsis: str = "…") -> str:

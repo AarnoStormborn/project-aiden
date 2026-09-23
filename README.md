@@ -67,13 +67,22 @@ overrides:
 | Variable | Default | Meaning |
 |---|---|---|
 | `AIDEN_HOME` | `~/.aiden` | credential + session root |
+| `AIDEN_SESSIONS_DIR` | `$AIDEN_HOME/sessions` | where transcripts are written |
+| `AIDEN_SPILL_DIR` | `$AIDEN_HOME/spill` | oversized tool output |
+| `AIDEN_AUTH_FILE` | `~/.aiden/auth.json` | credential file |
+| `AIDEN_PROVIDERS_FILE` | `providers.toml` | catalog overrides |
 | `AIDEN_MODEL` | `opencode-go/qwen3.8-flash` | default model (`provider/model[:level]`) |
 | `AIDEN_MAX_TOKENS` | `4096` | per-response output cap |
 | `AIDEN_THINKING` | `off` | thinking level |
-| `AIDEN_MAX_TURNS` | `10` | loop turn ceiling |
+| `AIDEN_MAX_TURNS` | `12` | loop turn ceiling |
+| `AIDEN_NUDGE_TURNS` | `3` | turns left before the wrap-up notice |
 | `AIDEN_MAX_COST_USD` | `0.50` | hard per-run spend ceiling |
-| `AIDEN_AUTH_FILE` | `~/.aiden/auth.json` | credential file |
-| `AIDEN_PROVIDERS_FILE` | `providers.toml` | catalog overrides |
+| `AIDEN_THEME` | `dark` | `dark` or `light` |
+| `AIDEN_TUI` | `auto` | `auto`, `plain` |
+| `AIDEN_ASCII` | unset | force ASCII glyphs |
+| `AIDEN_NO_COLOR` / `NO_COLOR` | unset | monochrome |
+| `AIDEN_SYNC` | on | set `0` if a terminal breaks on `CSI ?2026` |
+| `AIDEN_ANIMATIONS` | auto | set `off` to disable spinners |
 
 Sessions live in `~/.aiden/sessions/--<project-path>--/` — deliberately outside the repo so
 transcripts can never be committed. `providers.toml` is gitignored because it can hold keys.

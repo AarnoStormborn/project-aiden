@@ -45,8 +45,6 @@ from .session import (
 )
 from .tools import ToolContext, execute, tool_specs
 
-PREVIEW_CHARS = 160
-
 
 @dataclass(slots=True)
 class LoopResult:
@@ -319,7 +317,7 @@ def _execute_one(
             is_error=tool_result.is_error,
             duration_ms=duration_ms,
             output_chars=len(rendered),
-            output_preview=rendered[:PREVIEW_CHARS],
+            output=rendered,
             truncated=tool_result.truncated,
         )
     )

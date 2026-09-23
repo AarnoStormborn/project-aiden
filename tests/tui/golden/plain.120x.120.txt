@@ -5,14 +5,13 @@
 (thinking, 11 tokens)
 
 I'll read the config.
-The budgets are:
-
-READ_MAX_BYTES is 16_384 and READ_MAX_LINES is 400.
 
 [tool] read(path=aiden/config.py) ok 1ms
 READ_MAX_BYTES = 16_384
 
 --- turn 2 ---
+
+The budgets are:
 
 --- turn 3 ---
 
@@ -20,6 +19,9 @@ READ_MAX_BYTES = 16_384
 no matches for /TODO/ in .
 
 [warning] output budget exhausted by reasoning
+
+
+READ_MAX_BYTES is 16_384 and READ_MAX_LINES is 400.
 
 turns 3 · tool calls 2 · tokens in/out 1,800/120 · cost $0.0004
 session: /home/u/.aiden/sessions/--repo-project-aiden--/20260101T000000-abcdef01.jsonl

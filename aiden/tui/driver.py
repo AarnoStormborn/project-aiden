@@ -24,9 +24,7 @@ command line. The keymap, editor and overlays attach at the same seam later.
 from __future__ import annotations
 
 import shutil
-import signal
 import sys
-from types import FrameType
 from typing import IO
 
 from ..events import (
@@ -110,11 +108,17 @@ class TUIDriver:
         """Mark the run aborted and keep whatever was produced.
 
         research/06 §What great agent UIs do #10: an interrupt preserves work and never erases.
+        The open cell is marked ABORTED rather than left RUNNING, so it counts as final and its
+        partial text plus the "aborted" marker are committed to scrollback instead of vanishing
+        with the live region.
         """
         self.aborted = True
-        tail = self.transcript.tail()
-        if tail is not None:
-            tail.status = ABORTED
+        # Mark *every* in-flight cell, not just the open assistant one. Interrupting during a
+        # tool call used to leave a RUNNING cell in the live region, which the next erase
+        # discarded — the spec says commit partials and mark them aborted, never erase.
+        for cell in self.transcript.cells:
+            if cell.status == RUNNING:
+                cell.status = ABORTED
         self.stream.take_rest()
         self._tick()
 
@@ -227,24 +231,19 @@ class TUIDriver:
         return {"frames": self._frames, "bytes": self._bytes, "width": self.width}
 
 
+#: No-op context manager so call sites do not branch on whether the TUI is active.
+#:
+#: This deliberately does **not** install a SIGINT handler. An earlier version raised
+#: KeyboardInterrupt from the handler, which unwinds through asyncio's selector: the exception
+#: escapes from ``run_until_complete`` rather than from the awaiting coroutine, so the caller's
+#: ``except KeyboardInterrupt`` never sees it and Python prints a traceback at the user. Letting
+#: the default handler raise, and catching it at the top level, is both simpler and correct.
 class InterruptGuard:
-    """Turn SIGINT into a graceful abort instead of a traceback."""
-
     def __init__(self, driver: TUIDriver) -> None:
         self.driver = driver
-        self._previous: object | None = None
 
     def __enter__(self) -> InterruptGuard:
-        try:
-            self._previous = signal.signal(signal.SIGINT, self._handle)
-        except ValueError:  # not the main thread (tests)
-            self._previous = None
         return self
 
     def __exit__(self, *exc: object) -> None:
-        if self._previous is not None:
-            signal.signal(signal.SIGINT, self._previous)  # type: ignore[arg-type]
-
-    def _handle(self, signum: int, frame: FrameType | None) -> None:
-        self.driver.abort()
-        raise KeyboardInterrupt
+        return None

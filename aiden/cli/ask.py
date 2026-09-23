@@ -87,8 +87,8 @@ class ConsoleSink:
                 ),
                 file=sys.stderr,
             )
-            if self.verbose and event.output_preview:
-                first = event.output_preview.strip().splitlines()[0]
+            if self.verbose and event.output:
+                first = event.output.strip().splitlines()[0]
                 print(paint(f"    {first[:110]}", "dim"), file=sys.stderr)
         elif isinstance(event, Diagnostic):
             colour = "red" if event.level == "error" else "yellow"
@@ -109,12 +109,16 @@ def _wants_tui(args: argparse.Namespace) -> bool:
 def _make_sink(args: argparse.Namespace):
     """Pick the renderer. The loop is unaware of which one it got."""
     if not _wants_tui(args):
-        return ConsoleSink(verbose=args.verbose, show_thinking=args.show_thinking), _NullGuard()
+        return (
+            ConsoleSink(verbose=args.verbose, show_thinking=args.show_thinking),
+            _NullGuard(),
+            False,
+        )
 
     from ..tui.driver import InterruptGuard, TUIDriver
 
     driver = TUIDriver(show_thinking=args.show_thinking)
-    return driver, InterruptGuard(driver)
+    return driver, InterruptGuard(driver), True
 
 
 class _NullGuard:
@@ -165,10 +169,30 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: --cwd is not a directory: {cwd}", file=sys.stderr)
         return 2
 
-    return asyncio.run(_run(args, question, cwd))
+    sink, interrupt, used_tui = _make_sink(args)
+
+    try:
+        return asyncio.run(_run(args, question, cwd, sink, interrupt, used_tui))
+    except KeyboardInterrupt:
+        # SIGINT surfaces from ``asyncio.run`` in runners.py, *not* from the awaited coroutine,
+        # so catching it inside ``_run`` never fires. Marking the transcript aborted here
+        # commits the partial answer instead of leaving it in a live region that is about to be
+        # discarded, and keeps a traceback off the user's screen.
+        abort = getattr(sink, "abort", None)
+        if callable(abort):
+            abort()
+        print(paint("\ninterrupted", "yellow"), file=sys.stderr)
+        return 130
 
 
-async def _run(args: argparse.Namespace, question: str, cwd: Path) -> int:
+async def _run(
+    args: argparse.Namespace,
+    question: str,
+    cwd: Path,
+    sink,
+    interrupt,
+    used_tui: bool,
+) -> int:
     suite = ProviderSuite.load()
     try:
         model = suite.registry.resolve(args.model)
@@ -176,7 +200,6 @@ async def _run(args: argparse.Namespace, question: str, cwd: Path) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    sink, interrupt = _make_sink(args)
     session = None if args.no_session else SessionStore.create(cwd=cwd, model=model.model.ref)
     system_prompt = args.system_prompt.read_text() if args.system_prompt else None
 
@@ -195,10 +218,6 @@ async def _run(args: argparse.Namespace, question: str, cwd: Path) -> int:
                 thinking_level=model.thinking_level or args.thinking,
                 system_prompt=system_prompt,
             )
-    except KeyboardInterrupt:
-        # The sink already committed partials and marked the cell aborted; report and stop.
-        print(paint("\ninterrupted", "yellow"), file=sys.stderr)
-        return 130
     except ProviderError as exc:
         print(f"\nerror: {exc}", file=sys.stderr)
         return 1
@@ -228,7 +247,9 @@ async def _run(args: argparse.Namespace, question: str, cwd: Path) -> int:
                 indent=2,
             )
         )
-    else:
+    elif not used_tui:
+        # The TUI already rendered a summary cell into the transcript; printing the CLI report
+        # as well duplicated every number on screen.
         print()
         _print_report(result)
 

@@ -64,12 +64,49 @@ something rendered or replayed a frame:
    when the tuple held 45, and a reference to `tests/tui/test_theme.py` that did not exist. The
    test now exists, and the docstring no longer carries a number that can drift.
 
+## What testing in a real terminal found
+
+The golden frames caught layout bugs; running the thing in a pty caught a second, worse class.
+Every item below was invisible in tests and obvious within seconds on screen.
+
+1. **The UI emitted no colour at all.** 74 SGR sequences in a full run, all of them `\x1b[0m`.
+   The renderers called `theme.style(...)`, embedded it in a `rich.Text`, and then read `.plain`,
+   which strips the style — so the entire 45-token palette was decorative. No test noticed,
+   because the only colour assertion covered `markdown_block`, which renders through rich and
+   therefore worked. There is now a test that asserts the *cell* renderers emit distinct codes.
+2. **Assistant prose was clipped, not wrapped.** Every answer longer than the terminal ended
+   mid-sentence with an ellipsis, which reads as a model failure rather than a display choice.
+   Prose now wraps; tool output wraps too, because a clipped line of code is unusable and the
+   ellipsis only tells you something is missing.
+3. **Tool output was a 160-character preview presented as the whole result.** `ToolCallFinished`
+   carried `output_preview`, so the transcript showed a fragment with no marker and nothing to
+   expand. The event now carries the full output; the renderer caps what it *shows* and counts
+   what it hides (`… 154 more (e to expand)`).
+4. **Every turn's prose accumulated into one cell.** `_close_assistant()` only flipped a status
+   flag instead of clearing the open cell, so text after a tool call — and text in the next turn —
+   appended to the same cell. A turn's answer rendered *above* that turn's own marker. Cell
+   boundaries are now real, and `tests/tui/test_model.py` pins the ordering.
+5. **Ctrl-C printed a traceback.** Raising `KeyboardInterrupt` from a SIGINT handler unwinds
+   through asyncio's selector, so the exception escapes `run_until_complete` rather than the
+   awaiting coroutine — the `except` in `_run` never saw it. SIGINT is now left to the default
+   handler and caught around `asyncio.run`, and `abort()` marks every in-flight cell aborted so
+   partial work is committed instead of erased with the live region.
+6. **The run summary printed twice.** The TUI drew a summary cell and the CLI also printed its
+   own report to stderr. The CLI report is now suppressed when the TUI rendered the run.
+7. **The README advertised `AIDEN_MAX_TURNS=10` while the code used 12.** A live run answered a
+   question *about* the config and volunteered the discrepancy. `tests/test_docs_consistency.py`
+   now compares the README's environment table against `config`, because that is the second time
+   a number in prose drifted from the code.
+
 ## Measured
 
 | Budget (spec) | Measured |
 |---|---|
 | steady state ≤ 400 bytes/frame | **0 bytes** when nothing changed (asserted) |
 | ≤ 2 KB/frame during a normal stream | **~254 bytes/frame** over a live run (3,043 bytes / 12 frames) |
+| no full-screen clear | 0 occurrences of `CSI 2J` in a full coloured run (asserted) |
+| synchronized frames | 6 start / 6 end markers in one run; balanced |
+| colour actually emitted | 127 SGR sequences, 9 distinct codes, in a 6 KB run |
 | render deterministically | same events → identical frames (asserted) |
 | frames fit their width | no line exceeds the frame width at 80/94/120 (asserted) |
 

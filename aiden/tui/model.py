@@ -141,6 +141,10 @@ class Transcript:
                 )
             )
         elif isinstance(event, TurnStarted):
+            # A turn boundary ends the current text segment, so the next delta starts a fresh cell.
+            # Without this, every turn's prose accumulated into one cell and rendered above the
+            # marker of the turn that produced it.
+            self._close_assistant()
             # Turn markers are only useful when a run actually has more than one turn; emitting
             # them unconditionally would add a line of chrome to every single-turn answer.
             if event.turn > 1:
@@ -174,8 +178,8 @@ class Transcript:
             call.truncated = event.truncated
             call.skipped = event.skipped
             call.status = ERROR if event.is_error else OK
-            if event.output_preview and not call.output:
-                call.output = event.output_preview
+            if event.output:
+                call.output = event.output
         elif isinstance(event, Diagnostic):
             self._add(Notice(text=event.message, level=event.level))
         elif isinstance(event, UsageUpdated):
@@ -235,9 +239,16 @@ class Transcript:
         return self._open_thinking
 
     def _close_assistant(self, *, final: bool = False) -> None:
-        if self._open_assistant is None:
+        """End the current text segment.
+
+        This genuinely clears the open cell. An earlier version only flipped its status, so the
+        next ``TextDelta`` — after a tool call, or in the next turn — appended to the *same* cell.
+        The visible symptom was a transcript where a turn's answer appeared above that turn's
+        marker, and where per-cell line accounting could not tell the segments apart.
+        """
+        cell = self._open_assistant
+        if cell is None:
             return
-        self._open_assistant.status = OK
-        if final:
-            self._open_assistant.committed = self._open_assistant.text
-            self._open_assistant = None
+        cell.status = OK
+        cell.committed = cell.text
+        self._open_assistant = None

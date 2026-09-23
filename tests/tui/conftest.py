@@ -60,7 +60,7 @@ def realistic_turn() -> list:
             is_error=False,
             duration_ms=1,
             output_chars=120,
-            output_preview="READ_MAX_BYTES = 16_384",
+            output="READ_MAX_BYTES = 16_384",
         ),
         UsageUpdated(usage=Usage(input_tokens=900, output_tokens=40), cost_usd=0.0002),
         TurnStarted(turn=2),
@@ -73,7 +73,7 @@ def realistic_turn() -> list:
             is_error=True,
             duration_ms=11,
             output_chars=48,
-            output_preview="no matches for /TODO/ in .",
+            output="no matches for /TODO/ in .",
         ),
         Diagnostic(message="output budget exhausted by reasoning", level="warning"),
         TextDelta(text="\nREAD_MAX_BYTES is 16_384 and READ_MAX_LINES is 400.\n"),
@@ -101,7 +101,7 @@ def long_tool_output(lines: int = 40) -> list:
             is_error=False,
             duration_ms=5,
             output_chars=lines * 10,
-            output_preview="\n".join(f"match {i}" for i in range(lines)),
+            output="\n".join(f"match {i}" for i in range(lines)),
         )
     )
     events.append(

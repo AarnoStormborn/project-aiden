@@ -20,6 +20,20 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from rich.color import Color
+from rich.style import Style
+
+#: rich attribute name -> SGR parameter
+_SGR_ATTRIBUTES: tuple[tuple[str, int], ...] = (
+    ("bold", 1),
+    ("dim", 2),
+    ("italic", 3),
+    ("underline", 4),
+    ("blink", 5),
+    ("reverse", 7),
+    ("strike", 9),
+)
+
 #: Every semantic colour the UI may reference. Grouped like pi's token set
 #: (research/06 §Colour tokens): core / content / diff+code / level.
 TOKENS: tuple[str, ...] = (
@@ -274,6 +288,7 @@ class Theme:
         self.colour = colour
         self.glyphs = Glyphs(ascii_mode=ascii_requested() if ascii_mode is None else ascii_mode)
         self._palette = DARK if dark else LIGHT
+        self._ansi_cache: dict[str, str] = {}
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Theme:
@@ -294,6 +309,66 @@ class Theme:
         if not self.colour:
             return _monochrome(token)
         return self._palette[token]
+
+    def ansi(self, token: str) -> str:
+        """The SGR prefix that renders ``token``, or ``""`` when colour is off.
+
+        The writer resets style at the end of every line, so a line-level prefix is enough and a
+        dropped frame cannot leak colour into the user's shell prompt.
+
+        This method exists because the renderers used to call :meth:`style`, put it into a
+        ``rich.Text``, and then read ``.plain`` — which strips the style. The UI was therefore
+        completely monochrome despite a fully populated token table, and no test caught it
+        because the only colour assertion covered the markdown path, which renders through rich.
+        """
+        if not self.colour:
+            # NO_COLOR means *no escape sequences*, not "grey instead of cyan": the golden frames
+            # are layout snapshots and must stay diffable, and a terminal the user has asked to
+            # keep plain should not receive SGR at all. Status survives on the glyph, which is why
+            # the ASCII fallbacks for ok and error are deliberately distinct ([ok] / [err]).
+            return ""
+        cached = self._ansi_cache.get(token)
+        if cached is None:
+            cached = _sgr_from_style(self.style(token))
+            self._ansi_cache[token] = cached
+        return cached
+
+
+def _sgr_from_style(style_str: str) -> str:
+    """Convert a rich style string into an SGR escape prefix."""
+    if not style_str:
+        return ""
+    style = Style.parse(style_str)
+    codes: list[str] = []
+    for name, attribute in _SGR_ATTRIBUTES:
+        if getattr(style, name, False):
+            codes.append(str(attribute))
+    if style.color is not None:
+        foreground = _colour_sgr(style.color, background=False)
+        if foreground:
+            codes.append(foreground)
+    if style.bgcolor is not None:
+        background_code = _colour_sgr(style.bgcolor, background=True)
+        if background_code:
+            codes.append(background_code)
+    return f"\x1b[{';'.join(codes)}m" if codes else ""
+
+
+def _colour_sgr(colour: Color, *, background: bool) -> str:
+    if colour.is_default:
+        return ""
+    # Palette colours carry a number; truecolor ones only carry a triplet.
+    number = colour.number
+    if number is not None:
+        if number < 8:
+            return str((40 if background else 30) + number)
+        if number < 16:
+            return str((100 if background else 90) + number - 8)
+        return f"{48 if background else 38};5;{number}"
+    triplet = colour.triplet
+    if triplet is not None:
+        return f"{48 if background else 38};2;{triplet.red};{triplet.green};{triplet.blue}"
+    return ""
 
 
 def _monochrome(token: str) -> str:

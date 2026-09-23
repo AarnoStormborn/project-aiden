@@ -75,7 +75,7 @@ def test_tool_calls_are_committed_to_scrollback(driver: TUIDriver, out: io.Strin
             is_error=False,
             duration_ms=2,
             output_chars=10,
-            output_preview="contents",
+            output="contents",
         )
     )
     driver.finish()
@@ -157,3 +157,51 @@ def test_frame_budget_during_a_normal_stream(driver: TUIDriver):
     assert stats["frames"] > 0
     average = stats["bytes"] / max(1, stats["frames"])
     assert average < 2_000, f"average frame was {average:.0f} bytes"
+
+
+# --------------------------------------------------------------- interruption (regression)
+
+
+def test_abort_commits_partial_text_with_an_aborted_marker(driver: TUIDriver, out: io.StringIO):
+    """An interrupt preserves work: partial text is committed, not discarded with the tail."""
+    driver.emit(RunStarted(session_id="s", model="m", question="q", cwd="/repo"))
+    driver.emit(TextDelta(text="half an answer"))
+    driver.abort()
+
+    body = out.getvalue()
+    assert driver.aborted
+    assert "half an answer" in body
+    # The cell is final (not RUNNING), so its text is in scrollback rather than the live region.
+    assert driver._committed_cells > 0
+
+
+def test_abort_does_not_install_a_signal_handler(driver: TUIDriver):
+    """Regression: raising from a SIGINT handler unwound through asyncio's selector.
+
+    The exception escaped `run_until_complete` instead of the awaiting coroutine, so the CLI's
+    `except KeyboardInterrupt` never ran and the user got a traceback. SIGINT is now left to the
+    default handler and caught at the top level.
+    """
+    import signal
+
+    from aiden.tui.driver import InterruptGuard
+
+    before = signal.getsignal(signal.SIGINT)
+    with InterruptGuard(driver):
+        during = signal.getsignal(signal.SIGINT)
+    after = signal.getsignal(signal.SIGINT)
+
+    assert during is before, "the guard must not replace the SIGINT handler"
+    assert after is before
+
+
+def test_abort_during_a_tool_call_preserves_the_tool_cell(driver: TUIDriver, out: io.StringIO):
+    """Interrupting mid-tool must not erase the cell: mark it aborted and commit it."""
+    driver.emit(RunStarted(session_id="s", model="m", question="q", cwd="/repo"))
+    driver.emit(ToolCallStarted(call_id="c1", name="grep", arguments={"pattern": "x"}))
+    driver.abort()
+
+    body = out.getvalue()
+    assert "grep(" in body, "the in-flight tool cell was erased"
+    assert "aborted" in body, "the cell must be marked, not silently dropped"
+    assert all(c.status != "running" for c in driver.transcript.cells)

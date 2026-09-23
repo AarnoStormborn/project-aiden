@@ -57,7 +57,9 @@ class ToolCallFinished:
     is_error: bool
     duration_ms: int
     output_chars: int
-    output_preview: str = ""
+    #: Full tool output. Renderers cap what they *show* (the spec's visible-line budget) but the
+    #: text must be here, or the transcript shows a preview masquerading as the whole result.
+    output: str = ""
     truncated: bool = False
     #: True when the provider truncated the arguments, so the call was never executed.
     skipped: bool = False
