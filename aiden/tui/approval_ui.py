@@ -64,7 +64,7 @@ class PromptApprover:
         self._write("")
         self._write(_render_request(name, path, diff, sensitive=sensitive, reason=reason))
 
-        answer = (await self._ask(f"apply this change to {path}? [y/N] ")).strip().lower()
+        answer = (await self._ask(f"{_question(path)} ")).strip().lower()
         if answer in YES:
             self.approved_paths.add(path)
             return ApprovalDecision.yes()
@@ -80,6 +80,18 @@ class PromptApprover:
             except (EOFError, KeyboardInterrupt):
                 return ""
         return await _prompt_async(prompt)
+
+
+#: Above this, the target is not repeated in the question. The diff above already shows it, and a
+#: wrapped multi-line shell command makes the one line the user must read unreadable.
+QUESTION_TARGET_LIMIT = 48
+
+
+def _question(target: str) -> str:
+    """The question, without repeating a payload the diff has already shown in full."""
+    if "\n" in target or len(target) > QUESTION_TARGET_LIMIT:
+        return "apply this change? [y/N]"
+    return f"apply this change to {target}? [y/N]"
 
 
 def _render_request(

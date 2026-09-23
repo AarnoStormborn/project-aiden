@@ -22,8 +22,9 @@ mainstream harnesses do not:
 | **TUI — inline streaming renderer** | **done, snapshot-tested, perf budget enforced** |
 | **TUI — interactive session + keymap** | **done — `aiden tui`, `/` commands, configurable chords** |
 | **TUI — markdown rendering, session replay, resume** | **done — `--render`, `--resume <id>`** |
-| **Write capability — edit/write, guards, checkpoints, approval** | **done — see `docs/plan/v0.2a-write-capability.md`** |
-| `bash`, compaction, the learning subsystem | next |
+| **Write capability — edit/write, guards, checkpoints, approval** | **done — `docs/plan/v0.2a-write-capability.md`** |
+| **`bash` with a command policy** | **done — 6 of 7 tools; `docs/plan/v0.2b-bash.md`** |
+| `web_fetch`, compaction, the learning subsystem | next |
 
 ## Quick start
 
@@ -113,7 +114,7 @@ aiden/
   session.py     append-only JSONL entry tree (the transcript is the product)
   prompts.py     immutable versioned base prompt + content hash
   loop.py        turn state machine, tool dispatch, ceilings, wrap-up nudge
-  tools/         read, grep, glob, edit, write + path guard, policy, budgets, spill
+  tools/         read, grep, glob, edit, write, bash + path/command policy, budgets, spill
   approval.py    who may decide a change; deny-by-default when nobody can be asked
   checkpoint.py  pre-image snapshots, so /undo is a lookup
   diffutil.py    diff computation (used by the approval prompt and the transcript)

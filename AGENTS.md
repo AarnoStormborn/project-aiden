@@ -73,6 +73,24 @@ Rules that must not be relaxed without updating `docs/plan/v0.2a-write-capabilit
    proposals leave nothing behind.
 4. **Every decision is logged** (`approval` entries), because the transcript is the audit trail.
 
+### Shell commands
+
+`bash` is the most dangerous tool, so its policy is deliberately narrow:
+
+- **Only provably read-only commands run unattended** — `ls`, `cat`, `grep`, `git status/diff/log`,
+  `pytest --collect-only`, and similar prefixes.
+- **Any shell metacharacter forces approval**, even after an allowed prefix. `cat a > b` writes a
+  file and looks like `cat`. This is the rule that matters most.
+- **A prefix cannot express "unless a later flag"**, so destructive flags live in a rule's
+  `deny_tokens`: `find -delete`, `git branch -D`, `git show --output=file`.
+- **The dangerous-token list is short on purpose.** Adding `-r` or `-f` would send `grep -r` to the
+  user, and a gate that cries wolf gets bypassed.
+- **`stdin` is closed.** An interactive command hangs the run; failing fast is the honest behaviour.
+- **No checkpoint is possible for a shell command**, and the approval prompt says so — we cannot know
+  which files it will touch. Git is the safety net for that class of change.
+- **No in-process sandbox**, matching pi's stated reasoning: partial isolation gets mistaken for a
+  boundary while still depending on the host shell and credentials.
+
 ## Hard rules
 
 1. **Never commit credentials.** `~/.aiden/auth.json` (0600) holds them; `providers.toml` is

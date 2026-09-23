@@ -202,3 +202,15 @@ async def test_sensitive_paths_can_be_configured_to_skip_the_prompt(theme: Theme
     )
     assert decision.approved
     assert decision.decided_by == "auto", "an auto-approval must not look like the user's"
+
+
+def test_a_long_target_is_not_repeated_in_the_question():
+    """The diff above already shows it; repeating a wrapped shell command makes the prompt unreadable."""
+    from aiden.tui.approval_ui import _question
+
+    assert _question("aiden/loop.py") == "apply this change to aiden/loop.py? [y/N]"
+    assert _question("rm -rf build") == "apply this change to rm -rf build? [y/N]"
+
+    long_command = 'find build -maxdepth 2; echo "--- tracked files ---"; git ls-files build'
+    assert _question(long_command) == "apply this change? [y/N]"
+    assert _question("line one\nline two") == "apply this change? [y/N]"

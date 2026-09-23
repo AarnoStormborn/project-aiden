@@ -46,9 +46,12 @@ def read(path: str, ctx: ToolContext) -> None:
 
 
 def test_write_tools_are_registered_as_mutating():
-    assert MUTATING_TOOLS == {"edit", "write"}
+    assert MUTATING_TOOLS == {"edit", "write", "bash"}
     assert TOOLS["edit"].mutating is True
     assert TOOLS["write"].mutating is True
+    # `bash` is mutating because a shell *can* write; whether a given command needs approval is the
+    # command policy's decision, not this flag's.
+    assert TOOLS["bash"].mutating is True
 
 
 # --------------------------------------------------------------------------- edit: happy path

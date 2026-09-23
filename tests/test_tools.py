@@ -44,14 +44,15 @@ def ctx(project: Path, tmp_path: Path) -> ToolContext:
 
 
 def test_registry_exposes_the_expected_tools():
-    assert set(TOOLS) == {"read", "grep", "glob", "edit", "write"}
+    """Six of the seven the research specifies; web_fetch is the outstanding one."""
+    assert set(TOOLS) == {"read", "grep", "glob", "edit", "write", "bash"}
 
 
-def test_only_the_write_tools_are_marked_mutating():
+def test_the_mutating_flag_matches_the_actual_tools():
     """The flag drives policy and approval, so a mislabelled tool is a security bug."""
     from aiden.tools import MUTATING_TOOLS
 
-    assert MUTATING_TOOLS == {"edit", "write"}
+    assert MUTATING_TOOLS == {"edit", "write", "bash"}
     for name, tool in TOOLS.items():
         assert getattr(tool, "mutating", None) is (name in MUTATING_TOOLS)
 

@@ -400,3 +400,88 @@ async def test_an_approved_change_is_checkpointed(isolated, project):
 
     latest = store.latest()
     assert latest is not None and "src/app.py" in latest.files
+
+
+# --------------------------------------------------------------------------- bash through the gate
+
+
+async def test_a_read_only_bash_command_runs_without_asking(isolated, project):
+    """`pytest --collect-only` must not require a human, or the gate becomes noise."""
+    suite = FakeSuite([("bash", {"command": "ls"})])
+    approver = RecordingApprover(True)
+
+    await run_loop(
+        "list the files",
+        suite=suite,
+        model="fake",
+        cwd=project,
+        sink=RecordingSink(),
+        approver=approver,
+    )
+
+    assert approver.requests == [], "a provably read-only command must not prompt"
+    assert "app.py" in suite.tool_outputs() or "src" in suite.tool_outputs()
+
+
+async def test_a_mutating_bash_command_is_gated(isolated, project):
+    suite = FakeSuite([("bash", {"command": "rm -rf src"})])
+    approver = RecordingApprover(True)
+
+    await run_loop(
+        "clean up",
+        suite=suite,
+        model="fake",
+        cwd=project,
+        sink=RecordingSink(),
+        approver=approver,
+    )
+
+    assert approver.requests, "an unprovable command must ask"
+    assert "rm -rf src" in approver.requests[0]["diff"]
+
+
+async def test_a_declined_bash_command_does_not_run(isolated, project):
+    """The property that matters: no approval, no execution."""
+    suite = FakeSuite([("bash", {"command": "rm -rf src"})])
+
+    await run_loop(
+        "clean up",
+        suite=suite,
+        model="fake",
+        cwd=project,
+        sink=RecordingSink(),
+        approver=RecordingApprover(False, note="not now"),
+    )
+
+    assert (project / "src" / "app.py").exists(), "a declined command must not execute"
+    assert "not now" in suite.tool_outputs()
+
+
+async def test_a_non_interactive_run_cannot_run_a_mutating_command(isolated, project):
+    """DenyAll is the default, so a piped run cannot shell out destructively."""
+    suite = FakeSuite([("bash", {"command": "rm -rf src"})])
+
+    await run_loop(
+        "clean up",
+        suite=suite,
+        model="fake",
+        cwd=project,
+        sink=RecordingSink(),
+        approver=DenyAll(),
+    )
+
+    assert (project / "src" / "app.py").exists()
+
+
+async def test_the_shell_decision_is_logged(isolated, project):
+    suite = FakeSuite([("bash", {"command": "rm -rf src"})])
+    result = await run_loop(
+        "clean up",
+        suite=suite,
+        model="fake",
+        cwd=project,
+        sink=RecordingSink(),
+        approver=RecordingApprover(True),
+    )
+    entries = [e for e in read_entries(Path(result.session_path)) if e.type == ENTRY_APPROVAL]
+    assert entries and entries[0].payload["name"] == "bash"

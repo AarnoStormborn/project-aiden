@@ -424,31 +424,47 @@ async def _gate_mutation(
     if call.name not in MUTATING_TOOLS:
         return None
 
-    diff = preview_of(TOOLS[call.name], call.arguments, ctx)
+    tool = TOOLS[call.name]
+    # A tool may decide per call that this particular invocation is provably harmless — `bash` does
+    # exactly that for read-only commands. The default is to ask.
+    needs_approval = getattr(tool, "approval_required", None)
+    if callable(needs_approval) and not needs_approval(call.arguments, ctx):
+        return None
+
+    diff = preview_of(tool, call.arguments, ctx)
     if diff is None:
         return None
 
+    # The *path* policy applies only to tools that name a path. Applying it to every mutating tool
+    # refused `bash` with "path is empty" before the command policy ever ran — the guard was right
+    # about the shape of a file tool and wrong about the shape of a shell.
     path = str(call.arguments.get("path", ""))
-    _resolved, decision = ctx.policy().check(path, ctx.cwd)
-    if not decision.allowed:
-        return ToolResult.error(decision.reason)
+    sensitive = False
+    if path:
+        _resolved, decision = ctx.policy().check(path, ctx.cwd)
+        if not decision.allowed:
+            return ToolResult.error(decision.reason)
+        sensitive = decision.sensitive
+    # A shell has no path, so the command is what the prompt identifies.
+    target = path or str(call.arguments.get("command", ""))
 
+    reason_text = str(call.arguments.get("reason") or call.arguments.get("description") or "")
     sink.emit(
         ApprovalRequested(
             call_id=call.id,
             name=call.name,
-            path=path,
+            path=target,
             diff=diff,
-            sensitive=decision.sensitive,
-            reason=str(call.arguments.get("reason", "")),
+            sensitive=sensitive,
+            reason=reason_text,
         )
     )
     verdict = await approver.request(
         name=call.name,
-        path=path,
+        path=target,
         diff=diff,
-        sensitive=decision.sensitive,
-        reason=str(call.arguments.get("reason", "")),
+        sensitive=sensitive,
+        reason=reason_text,
     )
     sink.emit(
         ApprovalResolved(
@@ -463,7 +479,7 @@ async def _gate_mutation(
         {
             "call_id": call.id,
             "name": call.name,
-            "path": path,
+            "path": target,
             "approved": verdict.approved,
             "decided_by": verdict.decided_by,
             "note": verdict.note,
@@ -475,7 +491,7 @@ async def _gate_mutation(
         # Checkpoint after the decision but before the change. Capturing earlier also works, but it
         # leaves empty checkpoints for every declined proposal, and `/undo` then walks through turns
         # that changed nothing.
-        if checkpoint is not None and checkpoint_store is not None:
+        if checkpoint is not None and checkpoint_store is not None and path:
             resolved, _ = ctx.policy().check(path, ctx.cwd)
             if resolved is not None:
                 checkpoint_store.capture(checkpoint, resolved)
@@ -484,7 +500,7 @@ async def _gate_mutation(
     # The reason travels with the refusal so the model can adapt rather than retry identically.
     reason = verdict.note or "the user declined this change"
     return ToolResult.error(
-        f"{call.name} on {path} was declined and NOT applied: {reason}\n"
+        f"{call.name} on {target} was declined and NOT run: {reason}\n"
         "Do not retry the same change. Ask what to do differently, or propose an alternative."
     )
 

@@ -76,6 +76,8 @@ class ToolContext:
     spill_dir: Path | None = None
     #: Path rules for mutating tools. Imported lazily to avoid a cycle at module load.
     write_policy: Any = None
+    #: Rules for what a shell command may do unattended.
+    command_policy: Any = None
 
     def policy(self) -> Any:
         if self.write_policy is None:
@@ -83,6 +85,13 @@ class ToolContext:
 
             self.write_policy = WritePolicy.from_env()
         return self.write_policy
+
+    def commands(self) -> Any:
+        if self.command_policy is None:
+            from .command_policy import CommandPolicy
+
+            self.command_policy = CommandPolicy()
+        return self.command_policy
 
 
 class Tool(Protocol):
