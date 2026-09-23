@@ -20,11 +20,16 @@ output contract for research docs — follow it if you add one.
 
 ```bash
 uv sync                                  # install (Python 3.12 via uv)
+uv run python scripts/dev_setup.py       # macOS: un-hide the editable .pth files (see below)
 uv run python -m pytest -q               # tests: no network, must stay fast
 uv run ruff check .                      # lint
 uv run ruff format .                     # format
 uv run mypy                              # types (config in pyproject.toml)
 ```
+
+> On macOS, `uv sync` writes its editable `.pth` files with `UF_HIDDEN` set, and CPython 3.12+
+> skips hidden `.pth` files, so `uv run aiden …` may fail with `ModuleNotFoundError`. Run
+> `scripts/dev_setup.py` after syncing, or use `uv run python -m aiden …`, which is unaffected.
 
 `ruff`, `mypy` and `pytest` together are the **Tier-2 self-update gate**
 (`docs/architecture/aiden-architecture.md` §4.5). They must stay green: an agent that can
@@ -35,7 +40,12 @@ Live, network-and-money checks are opt-in and never part of the test suite:
 ```bash
 uv run python scripts/smoke_providers.py
 uv run python scripts/smoke_tools.py
+uv run python scripts/acceptance_v01.py
 ```
+
+Acceptance asserts **correctness only**. Efficiency is reported, not asserted: repeated runs of
+the same question varied between 11 and 17 tool calls, so a single-sample bound would be flaky.
+Efficiency gates need median-of-3 paired runs (`docs/research/05-benchmarks-evals.md`).
 
 ## Hard rules
 

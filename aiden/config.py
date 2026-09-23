@@ -87,7 +87,13 @@ DEFAULT_THINKING_LEVEL = os.environ.get("AIDEN_THINKING", "off")
 
 #: [r01] §loop: "explicit max_turns + cost_limit with auto-report on trip"; mini-SWE-agent
 #: ships step_limit 250 / cost_limit 3.0. v0.1 is single-question, so the turn cap is small.
-MAX_TURNS = int(os.environ.get("AIDEN_MAX_TURNS", 10))
+MAX_TURNS = int(os.environ.get("AIDEN_MAX_TURNS", 12))
+
+#: Turns remaining at which the loop injects a "wrap up and answer" notice. Measured need:
+#: in v0.1 acceptance runs the agent had the answer by turn 5 and spent the remaining turns
+#: re-verifying, then hit the ceiling with no answer at all. A nudge is cheaper than a higher
+#: ceiling, and it makes the budget visible to the model (the plan's "budget awareness").
+NUDGE_TURNS_REMAINING = int(os.environ.get("AIDEN_NUDGE_TURNS", 3))
 
 #: Hard per-run spend ceiling, enforced *inside* the loop (not by an external killer)
 #: because the loop must be able to stop cleanly and report ([r01] §cost).
@@ -101,6 +107,10 @@ READ_MAX_BYTES = 16_384
 READ_MAX_LINES = 400
 GREP_DEFAULT_MODE = "files-first"
 GREP_MAX_HITS = 200
+#: Byte ceiling on grep output. The hit cap alone is not enough — 200 matches inside long or
+#: minified lines can still be hundreds of KB ([r02] §3 measured a single search at ~90k
+#: tokens). Past this, the full text spills to a file and the model gets the head plus a path.
+GREP_MAX_BYTES = 16_384
 GLOB_MAX_PATHS = 500
 
 # --------------------------------------------------------------------------- context

@@ -7,9 +7,12 @@ import sys
 USAGE = """aiden <command> [args]
 
 commands:
-  providers    inspect, authenticate and refresh the provider suite
-  version      print the Aiden version
-"""
+  ask "question"   ask a question about the current repository (v0.1 harness)
+  providers        inspect, authenticate and refresh the provider suite
+  sessions         list recorded sessions for this project
+  version          print the Aiden version
+
+Run `aiden ask --help` or `aiden providers --help` for details."""
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -23,6 +26,14 @@ def main(argv: list[str] | None = None) -> int:
         from .providers import main as providers_main
 
         return providers_main(rest)
+    if command == "ask":
+        from .ask import main as ask_main
+
+        return ask_main(rest)
+    if command == "sessions":
+        from .sessions import main as sessions_main
+
+        return sessions_main(rest)
     if command == "version":
         from .. import __version__
 

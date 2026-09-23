@@ -18,30 +18,43 @@ mainstream harnesses do not:
 | Research corpus (`docs/research/`, 10 docs) | done |
 | Architecture + ADRs (`docs/architecture/`) | done |
 | **Provider suite** (`aiden/providers/`) | **done — 42 providers, 3 wire protocols, live-verified** |
-| v0.1 minimal harness (read code, answer questions) | in progress — see `docs/plan/v0.1-minimal-harness.md` |
-| TUI (first product deliverable) | not started — see `docs/research/06-ui-ux.md` |
+| **v0.1 harness — read code, answer questions** | **done — acceptance 5/5, ~$0.015 per 5 questions** |
+| TUI (first product deliverable) | next — see `docs/research/06-ui-ux.md` |
 
 ## Quick start
 
 ```bash
 uv sync
-uv run python -m pytest -q          # 86 tests, no network
+uv run python scripts/dev_setup.py  # macOS: clears the hidden flag uv puts on .pth files
+uv run python -m pytest -q          # 151 tests, no network
+
+# ask a question about this repository
+uv run python -m aiden ask --verbose "what are the tool output budgets, and where are they defined?"
 
 # credentials: reuse what pi already has, or set env vars
 uv run aiden providers import pi
-uv run aiden providers check
 
 # provider catalogue
 uv run aiden providers list
 uv run aiden providers show opencode-go
-uv run aiden providers models muse-spark
+
+# what did past runs do?
+uv run python -m aiden sessions list
+uv run python -m aiden sessions show <session-id> --tools
 ```
+
+> **macOS note.** `uv sync` writes editable-install `.pth` files with the BSD `UF_HIDDEN` flag
+> set, and CPython 3.12+ deliberately skips hidden `.pth` files — so `uv run aiden …` can fail
+> with `ModuleNotFoundError: No module named 'aiden'` even though the install is fine.
+> `uv run python scripts/dev_setup.py` clears the flag. `uv run python -m aiden …` works either
+> way, which is why every command above uses it.
 
 Live checks (spend money, need network):
 
 ```bash
 uv run python scripts/smoke_providers.py   # one call per provider
 uv run python scripts/smoke_tools.py       # full tool round-trip per provider
+uv run python scripts/acceptance_v01.py    # the five-question v0.1 acceptance suite
 ```
 
 ## Configuration
@@ -69,8 +82,13 @@ transcripts can never be committed. `providers.toml` is gitignored because it ca
 aiden/
   config.py      all constants, each with a source comment
   retry.py       error kind -> loop action (retry | compact | surface | abort)
+  events.py      harness event vocabulary + sinks (the TUI seam)
+  session.py     append-only JSONL entry tree (the transcript is the product)
+  prompts.py     immutable versioned base prompt + content hash
+  loop.py        turn state machine, tool dispatch, ceilings, wrap-up nudge
+  tools/         read, grep, glob + path guard, budgets, spill
   providers/     L1 transport: IR, catalog, auth, 3 wire protocols (+ quirk layer)
-  cli/           `aiden` command line
+  cli/           `aiden` command line (ask, providers, sessions)
 scripts/         catalog sync + live smoke tests
 tests/           fixture-driven, no network
 docs/
