@@ -176,10 +176,13 @@ def test_run_finished_adds_a_summary_with_the_numbers():
     assert summary.cost_usd == 0.0012
 
 
-def test_finalize_commits_the_open_cell():
+def test_finalize_closes_the_open_cell():
     t = Transcript()
     t.apply(RunStarted(session_id="s", model="m", question="q", cwd="/repo"))
     t.apply(TextDelta(text="final text"))
     t.finalize()
     assert t.tail() is None
-    assert t.of(AssistantText)[0].committed == "final text"
+    # `committed` is the driver's render state ("already written to scrollback"), not the
+    # reducer's. The reducer setting it made the driver think the cell was fully emitted, so
+    # finalized text never reached the transcript.
+    assert t.of(AssistantText)[0].committed == ""

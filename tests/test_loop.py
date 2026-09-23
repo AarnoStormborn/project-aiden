@@ -426,3 +426,44 @@ async def test_no_wrap_up_notice_when_plenty_of_turns_remain(isolated_sessions, 
     assert all(
         "[harness]" not in getattr(p, "text", "") for m in suite.calls[-1] for p in m.content
     )
+
+
+async def test_wrap_up_notice_does_not_fire_on_the_first_turn_of_a_short_run(
+    isolated_sessions, project
+):
+    """Regression: a fixed threshold equal to the whole budget nudged on turn 1.
+
+    With max_turns=3 the agent was told to wrap up before reading anything, and answered a
+    question it could have answered with one more tool call.
+    """
+    tool_turn = completion(
+        calls=[ToolCallPart(id="c1", name="read", arguments={"path": "notes.md"})],
+        stop="tool_use",
+    )
+    suite = FakeSuite([tool_turn, tool_turn, completion(text="answered")])
+    sink = RecordingSink()
+
+    await run_loop("q", suite=suite, model="fake", cwd=project, sink=sink, max_turns=3)
+
+    first_request = suite.calls[0]
+    assert not any(
+        "[harness]" in getattr(p, "text", "") for m in first_request for p in m.content
+    ), "the wrap-up notice must not fire before any work has happened"
+    # It still fires by the final turn, so the run cannot die without an answer.
+    assert any("[harness]" in d.message for d in sink.of(Diagnostic))
+
+
+async def test_wrap_up_threshold_scales_down_for_short_budgets(isolated_sessions, project):
+    """A 1-turn budget cannot nudge at all: there is no earlier turn to nudge from."""
+    suite = FakeSuite(
+        [
+            completion(
+                calls=[ToolCallPart(id="c1", name="read", arguments={"path": "notes.md"})],
+                stop="tool_use",
+            )
+        ]
+    )
+    sink = RecordingSink()
+    await run_loop("q", suite=suite, model="fake", cwd=project, sink=sink, max_turns=1)
+    nudges = [d for d in sink.of(Diagnostic) if "[harness]" in d.message]
+    assert not nudges, "a single-turn run has no room for a nudge"

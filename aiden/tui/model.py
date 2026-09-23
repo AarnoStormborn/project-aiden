@@ -245,10 +245,14 @@ class Transcript:
         next ``TextDelta`` — after a tool call, or in the next turn — appended to the *same* cell.
         The visible symptom was a transcript where a turn's answer appeared above that turn's
         marker, and where per-cell line accounting could not tell the segments apart.
+
+        It deliberately does **not** touch ``committed``. That field means "text already written to
+        scrollback", which is the *driver's* rendering state, not something the reducer can know.
+        Setting it here made the driver believe the whole cell had been emitted, so finalized
+        text silently never reached the transcript.
         """
         cell = self._open_assistant
         if cell is None:
             return
         cell.status = OK
-        cell.committed = cell.text
         self._open_assistant = None

@@ -334,3 +334,18 @@ def test_glob_skips_local_scratch_directories(ctx: ToolContext, project: Path):
     assert ".aiden-research" not in result.output
     assert ".pi/" not in result.output
     assert ".github/ci.yml" in result.output
+
+
+def test_grep_paths_are_relative_to_the_working_directory(ctx: ToolContext, project: Path):
+    """Absolute paths are long, wrap badly, and are not what `read` expects."""
+    result = execute("grep", {"pattern": "TODO", "mode": "content"}, ctx)
+    assert str(project) not in result.output, "an absolute path leaked into grep output"
+    assert "src/app.py:" in result.output
+
+
+def test_grep_paths_stay_relative_when_the_search_root_is_a_file(ctx: ToolContext, project: Path):
+    """Regression: stripping the search root failed here, because ripgrep emits '<file>:<line>:'."""
+    result = execute("grep", {"pattern": "TODO", "mode": "content", "path": "src/app.py"}, ctx)
+    assert not result.is_error
+    assert str(project) not in result.output
+    assert result.output.lstrip().startswith("1 ") or "src/app.py:" in result.output

@@ -129,6 +129,35 @@ is not reading, so the live region owns the cursor and there is no contention. S
 mid-flight needs the editor and driver coordinated through `patch_stdout`; claiming it now would
 mean an input path that silently drops keystrokes.
 
+## Markdown rendering
+
+Answers were showing their own source: `**bold**`, `|---|` tables and ``` fences reached the
+transcript verbatim, because `render.markdown_block` and `render.syntax_block` existed and were
+never called. `aiden/tui/render.py` now renders at **block boundaries**: streaming text stays plain
+in the live region (re-parsing markdown per delta is the expensive path), and a block is rendered
+as markdown the moment a blank line closes it. A single block with no blank line is bounded by
+`LIVE_LINE_CAP` so a wall of text cannot repaint the whole answer every frame.
+
+Four bugs surfaced while wiring this, all in the same place — the boundary between the reducer and
+the renderer:
+
+- **The reducer was writing the driver's render state.** `_close_assistant` set
+  `cell.committed = cell.text`, so the driver believed the cell had already been emitted and
+  finalized text silently never reached scrollback. `committed` means "already written to
+  scrollback" and belongs to the driver; the reducer now only sets status.
+- **The commit unit was a line.** Half a paragraph cannot be markdown-rendered, so commits are now
+  whole blocks.
+- **Assistant bookkeeping counted lines**, which cannot survive markdown rendering changing the
+  line count. It now tracks characters.
+- **A single line with no blank line after it is not a complete block**, so a one-line answer stays
+  live until the segment settles rather than committing immediately. Correct, and worth knowing
+  when reading the tests.
+
+Also fixed while using it: grep emitted absolute paths (long, wrapping badly, and not what `read`
+expects) because the prefix stripping used the *search root*, which fails when the root is a file;
+and the wrap-up notice fired on turn 1 of a short run, telling the agent to answer before it had
+read anything.
+
 ## Still not built
 
 - **Alt-screen overlays**: `review`, `transcript` pager, `sessions`, approval prompts. The

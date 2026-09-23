@@ -138,8 +138,14 @@ async def run_loop(
 
             # Budget awareness: near the ceiling, tell the model to answer with what it has.
             # Without this, a thorough agent keeps verifying and hits max_turns with nothing.
+            #
+            # The threshold is capped at half the budget. A fixed threshold equal to the whole
+            # budget fires on turn 1 of a short run, which suppressed exploration entirely: with
+            # max_turns=3 the agent was told to wrap up before it had read anything, and answered
+            # "I did not read them" to a question it could have answered in one more call.
             remaining = max_turns - turn
-            if 0 < remaining <= config.NUDGE_TURNS_REMAINING:
+            nudge_at = max(1, min(config.NUDGE_TURNS_REMAINING, max_turns // 2))
+            if 0 < remaining <= nudge_at:
                 notice = _wrap_up_notice(remaining)
                 messages.append(Message.text("user", notice))
                 # Recorded, not silent: the transcript must explain why the agent stopped

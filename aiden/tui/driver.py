@@ -78,8 +78,9 @@ class TUIDriver:
         self.aborted = False
 
         self._committed_cells = 0
-        # cell id -> lines of that assistant cell already written to scrollback
-        self._assistant_lines: dict[int, int] = {}
+        # cell id -> characters of that assistant cell already committed. Characters, not lines:
+        # markdown rendering changes the line count, so line arithmetic cannot survive it.
+        self._assistant_chars: dict[int, int] = {}
         self._frames = 0
         self._bytes = 0
         #: Seconds spent producing each frame. The spec budgets frame *time* (p50 ≤ 3 ms,
@@ -156,13 +157,22 @@ class TUIDriver:
 
         open_cell = self.transcript.tail()
         if open_cell is not None:
-            released = self.stream.take_commit()
+            # Complete blocks are rendered as markdown. Streaming text stays plain in the live
+            # region (re-parsing markdown per delta is the expensive path); it becomes markdown at
+            # the moment its block closes, which is the first point where the rendered form is
+            # stable.
+            released = self.stream.take_blocks()
             if released:
-                lines = render.plain_lines(released, self.width, self.theme)
-                self._assistant_lines[open_cell.id] = self._assistant_lines.get(
-                    open_cell.id, 0
-                ) + len(lines)
-                pending.extend(lines)
+                open_cell.committed += released
+                self._assistant_chars[open_cell.id] = len(open_cell.committed)
+                pending.extend(render.markdown_block(released, self.width, self.theme))
+
+            # Keep the live region bounded for a wall of text with no blank lines.
+            overflow = self.stream.release_overflow()
+            if overflow:
+                open_cell.committed += overflow
+                self._assistant_chars[open_cell.id] = len(open_cell.committed)
+                pending.extend(render.plain_lines(overflow, self.width, self.theme))
 
         final_count = self._final_cell_count()
         for cell in self.transcript.cells[self._committed_cells : final_count]:
@@ -190,10 +200,13 @@ class TUIDriver:
     def _final_lines(self, cell) -> list[str]:
         """Lines for a now-final cell, skipping assistant text already written out."""
         if isinstance(cell, AssistantText):
-            written = self._assistant_lines.get(cell.id, 0)
-            lines = render.plain_lines(cell.text, self.width, self.theme)
-            self._assistant_lines[cell.id] = len(lines)
-            return lines[written:]
+            remaining = cell.text[len(cell.committed) :]
+            cell.committed = cell.text
+            self._assistant_chars[cell.id] = len(cell.text)
+            if not remaining.strip():
+                return []
+            # The segment is closed, so the trailing partial block is now renderable as markdown.
+            return render.markdown_block(remaining, self.width, self.theme)
         return render.render_cell(cell, self.width, self.theme).lines
 
     def _live_lines(self) -> list[str]:
@@ -211,13 +224,12 @@ class TUIDriver:
                 lines.extend(rendered)
 
         if open_cell is not None:
-            written = self._assistant_lines.get(open_cell.id, 0)
-            all_lines = render.plain_lines(open_cell.text, self.width, self.theme)
-            remainder = all_lines[written:]
-            if remainder:
+            # Only what has not been committed is live, rendered plainly because it is incomplete.
+            remainder = open_cell.text[len(open_cell.committed) :]
+            if remainder.strip():
                 if lines:
                     lines.append("")
-                lines.extend(remainder)
+                lines.extend(render.plain_lines(remainder, self.width, self.theme))
 
         return lines
 

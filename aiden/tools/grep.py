@@ -134,9 +134,9 @@ class GrepTool:
 
         rg = shutil.which("rg")
         if rg:
-            result = _run_rg(rg, pattern, search_root, mode, context, max_results)
+            result = _run_rg(rg, pattern, search_root, mode, context, max_results, base=ctx.cwd)
         else:
-            result = _run_python(pattern, search_root, mode, context, max_results)
+            result = _run_python(pattern, search_root, mode, context, max_results, base=ctx.cwd)
         return _apply_byte_budget(result, ctx)
 
 
@@ -175,6 +175,8 @@ def _run_rg(
     mode: str,
     context: int,
     max_results: int,
+    *,
+    base: Path,
 ) -> ToolResult:
     cmd = [rg, "--no-config", "--color=never", "--no-heading", "--with-filename"]
     if mode == MODE_FILES:
@@ -213,13 +215,21 @@ def _run_rg(
     lines = [ln for ln in proc.stdout.splitlines() if ln.strip()]
     if not lines:
         return _no_matches(pattern, root, mode)
-    return _format(lines, root, mode, max_results)
+    return _format(lines, base, mode, max_results)
 
 
 # --------------------------------------------------------------------------- fallback path
 
 
-def _run_python(pattern: str, root: Path, mode: str, context: int, max_results: int) -> ToolResult:
+def _run_python(
+    pattern: str,
+    root: Path,
+    mode: str,
+    context: int,
+    max_results: int,
+    *,
+    base: Path,
+) -> ToolResult:
     try:
         regex = re.compile(pattern)
     except re.error as exc:
@@ -237,7 +247,7 @@ def _run_python(pattern: str, root: Path, mode: str, context: int, max_results: 
         matched = [i for i, line in enumerate(lines) if regex.search(line)]
         if not matched:
             continue
-        rel = _relative(path, root)
+        rel = _relative(path, base)
         if mode == MODE_FILES:
             hits.append(f"{rel}:{len(matched)}")
         else:
@@ -254,7 +264,7 @@ def _run_python(pattern: str, root: Path, mode: str, context: int, max_results: 
 
     if not hits:
         return _no_matches(pattern, root, mode)
-    return _format(hits, root, mode, max_results)
+    return _format(hits, base, mode, max_results)
 
 
 def _walk(root: Path) -> list[Path]:
@@ -270,12 +280,15 @@ def _walk(root: Path) -> list[Path]:
 # --------------------------------------------------------------------------- formatting
 
 
-def _format(lines: list[str], root: Path, mode: str, max_results: int) -> ToolResult:
+def _format(lines: list[str], base: Path, mode: str, max_results: int) -> ToolResult:
     total = len(lines)
     kept = lines[:max_results]
-    # Paths relative to the search root: shorter, cheaper, and what the model will pass to read.
-    root_prefix = str(root) + "/"
-    kept = [ln.replace(root_prefix, "") for ln in kept]
+    # Paths relative to the *working directory*, not the search root. Two reasons: relative paths
+    # are what the model must pass back to `read`, and an absolute path is long enough to wrap
+    # across lines in a narrow terminal. Stripping the search root instead was wrong whenever the
+    # root was a file, because ripgrep then emits "<file>:<line>:..." with no trailing separator.
+    base_prefix = str(base) + "/"
+    kept = [ln.replace(base_prefix, "") for ln in kept]
 
     truncated = total > max_results
     hint = ""

@@ -127,25 +127,31 @@ def test_controller_separates_stable_and_tail():
     assert controller.tail == "line two"
 
 
-def test_controller_commits_only_complete_lines():
+def test_controller_commits_only_complete_blocks():
+    """Blocks, not lines: committing half a paragraph would render it twice, in two forms."""
     controller = StreamController()
-    controller.push("alpha\nbeta\npartial")
-    # Cadence is one line per tick in smooth gear, so two ticks release two lines.
-    assert controller.take_commit() == "alpha\n"
-    assert controller.take_commit() == "beta\n"
-    assert controller.take_commit() == "", "the partial line must never be committed"
-    assert controller.tail == "partial"
+    controller.push("first paragraph\n")
+    assert controller.take_blocks() == "", "an open paragraph is not committable"
+    assert "first paragraph" in controller.uncommitted
+
+    controller.push("\nsecond paragraph\n")
+    assert controller.take_blocks() == "first paragraph\n\n"
+    # The next block is complete but not yet released by the cadence, so it is still uncommitted
+    # while `tail` (the open, unterminated line) is empty.
+    assert controller.uncommitted == "second paragraph\n"
+    assert controller.tail == ""
 
 
 def test_controller_respects_cadence_under_load():
     controller = StreamController(Chunker(smooth_batch=1, catch_up_threshold=4))
-    controller.push("a\nb\nc\n")
-    assert controller.take_commit() == "a\n", "smooth gear releases one line"
+    controller.push("a\n\nb\n\nc\n\n")
+    assert controller.take_blocks() == "a\n\n", "smooth gear releases one block"
+    assert controller.take_blocks() == "b\n\n"
 
-    # The model outruns the renderer: pending now exceeds the threshold, so catch up and drain.
-    controller.push("d\ne\nf\ng\nh\n")
-    drained = controller.take_commit()
-    assert drained == "b\nc\nd\ne\nf\ng\nh\n"
+    # The model outruns the renderer: pending blocks exceed the threshold, so catch up and drain.
+    controller.push("d\n\ne\n\nf\n\ng\n\nh\n\n")
+    drained = controller.take_blocks()
+    assert drained == "c\n\nd\n\ne\n\nf\n\ng\n\nh\n\n"
 
 
 def test_flush_commits_everything_including_the_partial_line():
@@ -164,10 +170,13 @@ def test_finalize_makes_the_partial_line_stable():
     assert controller.stable == "text\nmore"
 
 
-def test_take_commit_is_empty_when_no_complete_line_exists():
+def test_take_blocks_is_empty_when_no_complete_block_exists():
     controller = StreamController()
     controller.push("partial")
-    assert controller.take_commit() == ""
+    assert controller.take_blocks() == ""
+
+    controller.push(" still partial\n")
+    assert controller.take_blocks() == "", "one newline does not close a block"
 
 
 def test_take_rest_does_not_finalize_the_stream():

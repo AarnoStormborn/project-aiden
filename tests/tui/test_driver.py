@@ -138,9 +138,17 @@ def test_resize_forces_a_full_repaint(driver: TUIDriver, out: io.StringIO):
 
 
 def test_resize_with_nothing_live_emits_nothing(driver: TUIDriver, out: io.StringIO):
-    """No live content means nothing to re-wrap: emitting a frame would be pure waste."""
+    """No live content means nothing to re-wrap: emitting a frame would be pure waste.
+
+    The run must be *settled* first. A line with no blank line after it is not a complete markdown
+    block, so it stays in the live region until the segment closes — which is why this test ends
+    the run before resizing.
+    """
     driver.emit(RunStarted(session_id="s", model="m", question="q", cwd="/repo"))
     driver.emit(TextDelta(text="already committed\n"))
+    driver.emit(
+        RunFinished(stop_reason="end_turn", turns=1, tool_calls=0, usage=Usage(), cost_usd=0.0)
+    )
     before = len(out.getvalue())
 
     driver.resize(120)
@@ -205,3 +213,82 @@ def test_abort_during_a_tool_call_preserves_the_tool_cell(driver: TUIDriver, out
     assert "grep(" in body, "the in-flight tool cell was erased"
     assert "aborted" in body, "the cell must be marked, not silently dropped"
     assert all(c.status != "running" for c in driver.transcript.cells)
+
+
+# ----------------------------------------------------- markdown rendering (regression)
+
+
+def _committed_output(driver_out: io.StringIO) -> str:
+    """Only the payloads written to real scrollback.
+
+    Live-region frames are wrapped in synchronized-output markers; committed lines are not. That
+    distinction is what lets a test separate "what the user keeps" from "what was repainted".
+    Negative matching is required rather than splitting on the start marker, because the first
+    frame's start marker is consumed by the split and its body would otherwise look committed.
+    """
+    import re
+
+    return re.sub(r"\x1b\[\?2026h.*?\x1b\[\?2026l", "", driver_out.getvalue(), flags=re.S)
+
+
+def _run_markdown(out: io.StringIO, theme: Theme, *, settle: bool = True) -> TUIDriver:
+    driver = TUIDriver(out=out, theme=theme, width=72)
+    driver.emit(RunStarted(session_id="s", model="m", question="q", cwd="/repo"))
+    driver.emit(TextDelta(text="## Heading\n\nSome **bold** and `code` here.\n\n"))
+    driver.emit(TextDelta(text="| a | b |\n|---|---|\n| 1 | 2 |\n\n```python\nvalue = 1\n```\n"))
+    if settle:
+        driver.emit(
+            RunFinished(stop_reason="end_turn", turns=1, tool_calls=0, usage=Usage(), cost_usd=0.0)
+        )
+    return driver
+
+
+def test_committed_assistant_text_is_rendered_markdown(out: io.StringIO, theme: Theme):
+    """Regression: `markdown_block` existed but was never called, so answers showed raw source.
+
+    The spec's design is stream plain, render at block boundaries; before this the transcript
+    showed `**bold**`, `|---|` tables and ``` fences verbatim.
+    """
+    _run_markdown(out, theme)
+    committed = _committed_output(out)
+
+    assert "Some **bold**" not in committed, "raw markdown emphasis reached scrollback"
+    assert "| a | b |" not in committed, "raw markdown table reached scrollback"
+    assert "```" not in committed, "raw code fence reached scrollback"
+    # ...and the content itself survives.
+    assert "bold" in committed
+    assert "value = 1" in committed
+
+
+def test_markdown_is_rendered_but_the_live_region_stays_plain(out: io.StringIO, theme: Theme):
+    """Re-parsing markdown on every delta is the expensive path the spec warns about."""
+    driver = TUIDriver(out=out, theme=theme, width=72)
+    driver.emit(RunStarted(session_id="s", model="m", question="q", cwd="/repo"))
+    driver.emit(TextDelta(text="Some **bold** text"))
+
+    live = "".join(driver._live_lines())
+    assert "**bold**" in live, "the in-flight tail is shown plainly, not re-parsed per delta"
+
+
+def test_an_unclosed_block_is_not_committed_early(out: io.StringIO, theme: Theme):
+    """A paragraph is only renderable once its block closes."""
+    driver = TUIDriver(out=out, theme=theme, width=72)
+    driver.emit(RunStarted(session_id="s", model="m", question="q", cwd="/repo"))
+    driver.emit(TextDelta(text="an open paragraph\nstill open\n"))
+    assert _committed_output(out).count("open paragraph") == 0
+
+    driver.emit(TextDelta(text="\n"))  # blank line closes the block
+    assert "open paragraph" in _committed_output(out)
+
+
+def test_a_wall_of_text_stays_bounded_in_the_live_region(out: io.StringIO, theme: Theme):
+    """No blank lines means no block boundary, so the cap must release lines."""
+    from aiden.tui.stream import LIVE_LINE_CAP
+
+    driver = TUIDriver(out=out, theme=theme, width=72)
+    driver.emit(RunStarted(session_id="s", model="m", question="q", cwd="/repo"))
+    for _ in range(LIVE_LINE_CAP * 3):
+        driver.emit(TextDelta(text="a line with no blank after it\n"))
+
+    assert len(driver._live_lines()) <= LIVE_LINE_CAP + 1
+    assert "a line with no blank" in _committed_output(out)

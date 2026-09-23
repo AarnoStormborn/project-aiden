@@ -100,6 +100,39 @@ def split(text: str) -> tuple[str, str]:
     return candidate, remainder
 
 
+#: Lines of a single unterminated block that may stay in the live region. A block with no blank
+#: line (a wall of text) would otherwise repaint the whole answer every frame and blow the
+#: per-frame byte budget, so past this the leading lines are released plainly.
+LIVE_LINE_CAP = 24
+
+
+def split_blocks(text: str) -> tuple[str, str]:
+    """Split accumulated text into ``(complete blocks, trailing partial block)``.
+
+    A block ends at a blank line. That is the earliest point at which a paragraph, list, table or
+    fence is structurally complete — and therefore the earliest point at which markdown can be
+    rendered without the rendered form changing under the reader as more text arrives.
+    """
+    cut = text.rfind("\n\n")
+    if cut == -1:
+        return "", text
+    return text[: cut + 2], text[cut + 2 :]
+
+
+def _blocks(text: str) -> list[str]:
+    """Split on blank lines, keeping the separators so the pieces rejoin losslessly."""
+    out: list[str] = []
+    current: list[str] = []
+    for line in text.splitlines(keepends=True):
+        current.append(line)
+        if not line.strip():
+            out.append("".join(current))
+            current = []
+    if current:
+        out.append("".join(current))
+    return out
+
+
 @dataclass
 class Chunker:
     """How many pending lines to commit this tick, with hysteresis.
@@ -171,26 +204,59 @@ class StreamController:
         return self.text[: self.committed_chars] + split(self._uncommitted)[0]
 
     @property
+    def uncommitted(self) -> str:
+        """Everything not yet committed.
+
+        Two things live here and the distinction matters: complete blocks awaiting their turn in
+        the commit cadence, and the open block which is still being written. ``tail`` is only the
+        latter.
+        """
+        if self._finalized:
+            return ""
+        return self._uncommitted
+
+    @property
     def tail(self) -> str:
-        """The mutable remainder: only what has *not* already been committed."""
+        """The mutable *incomplete* remainder (the open block's last, unterminated line)."""
         if self._finalized:
             return ""
         return split(self._uncommitted)[1]
 
-    def pending_lines(self) -> list[str]:
-        """Stable lines not yet committed."""
-        stable_rest = split(self._uncommitted)[0]
-        return [line for line in stable_rest.splitlines(keepends=True) if line.endswith("\n")]
+    def take_blocks(self) -> str:
+        """Consume complete markdown blocks, as many as the chunker allows.
 
-    def take_commit(self) -> str:
-        """Consume as many stable lines as the chunker allows, returning the text to commit."""
-        lines = self.pending_lines()
-        if not lines:
+        Blocks, not lines, are the commit unit for assistant prose: committing half a paragraph
+        would render it twice in two different forms, and markdown cannot be rendered correctly
+        until a block is closed. The chunker still governs cadence — one block per event in smooth
+        gear, draining when the model outruns the renderer.
+        """
+        complete, _partial = split_blocks(self._uncommitted)
+        if not complete:
             return ""
-        batch = self.chunker.next_batch(len(lines))
+        blocks = _blocks(complete)
+        batch = self.chunker.next_batch(len(blocks))
         if batch == 0:
             return ""
-        take = "".join(lines[:batch])
+        take = "".join(blocks[:batch])
+        self.committed_chars += len(take)
+        return take
+
+    def live_remainder(self, cap: int = LIVE_LINE_CAP) -> str:
+        """Text that must stay in the live region, plus anything released early by the cap.
+
+        Returns the remainder to render. When a single block exceeds ``cap`` lines the leading
+        lines are released (they will be committed plainly, not as markdown) so the live region
+        stays bounded.
+        """
+        return self._uncommitted
+
+    def release_overflow(self, cap: int = LIVE_LINE_CAP) -> str:
+        """Release the head of an over-long partial block so the live region stays bounded."""
+        _complete, partial = split_blocks(self._uncommitted)
+        lines = partial.splitlines(keepends=True)
+        if len(lines) <= cap:
+            return ""
+        take = "".join(lines[: len(lines) - cap])
         self.committed_chars += len(take)
         return take
 
