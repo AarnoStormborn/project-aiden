@@ -26,6 +26,10 @@ from .theme import Theme
 
 GUTTER = "  "  # LIVE_PREFIX_COLS = 2: every continuation line, and cell padding
 
+#: Diff lines shown inline before truncating. The full diff is available in the session log; the
+#: approval prompt itself shows it in full.
+APPROVAL_DIFF_LINES = 24
+
 
 @dataclass(frozen=True)
 class Rendered:
@@ -56,6 +60,8 @@ def render_cell(
         return _thinking(cell, width, theme)
     if isinstance(cell, model.ToolCall):
         return _tool_call(cell, width, theme, caps)
+    if isinstance(cell, model.Approval):
+        return _approval(cell, width, theme)
     if isinstance(cell, model.Notice):
         return _notice(cell, width, theme)
     if isinstance(cell, model.TurnMarker):
@@ -213,6 +219,56 @@ def _tool_call(cell: model.ToolCall, width: int, theme: Theme, caps: TerminalCap
                     theme,
                 )
             )
+    return Rendered(lines, len(lines))
+
+
+def _approval(cell: model.Approval, width: int, theme: Theme) -> Rendered:
+    """The proposed change and its fate.
+
+    Diff lines use the ``diff_added``/``diff_removed``/``diff_context`` tokens, which existed in the
+    palette from the start and had nothing to render until now.
+    """
+    from ..diffutil import render_lines
+
+    glyph = {
+        model.PENDING: theme.glyphs.warning,
+        model.OK: theme.glyphs.ok,
+        model.ERROR: theme.glyphs.error,
+    }.get(cell.status, theme.glyphs.pending)
+    verb = {"pending": "approve?", "ok": "applied", "error": "declined"}.get(
+        cell.status, cell.status
+    )
+    marker = " ⚠ sensitive" if cell.sensitive else ""
+    head = f"{glyph} {cell.name} → {cell.path} ({verb}){marker}"
+    token = {"pending": "tool_pending", "ok": "tool_ok", "error": "tool_err"}.get(
+        cell.status, "tool_pending"
+    )
+    lines = [paint(_fit(head, width, dot := theme.glyphs.ellipsis), token, theme)]
+
+    if cell.status == model.PENDING:
+        shown = 0
+        for kind, raw in render_lines(cell.diff, max_lines=APPROVAL_DIFF_LINES):
+            body = raw[1:] if kind in {"add", "del"} else raw
+            prefix = {"add": "+", "del": "-", "ctx": " ", "meta": " "}[kind]
+            style = {
+                "add": "diff_added",
+                "del": "diff_removed",
+                "ctx": "diff_context",
+                "meta": "dim",
+            }[kind]
+            lines.extend(
+                paint(piece, style, theme)
+                for piece in _wrapped(f"{prefix} {body}", GUTTER, width, theme)
+            )
+            shown += 1
+        if shown >= APPROVAL_DIFF_LINES:
+            lines.append(paint(f"{GUTTER}{dot} diff truncated (d to review)", "dim", theme))
+    elif cell.decided_by and cell.decided_by != "user":
+        # The header already carries the outcome; repeating it here was noise. Who decided is only
+        # worth a line when it was *not* the user, because that is the case worth noticing.
+        lines.append(paint(f"{GUTTER}decided by {cell.decided_by}", "dim", theme))
+    if cell.note and cell.status != model.PENDING:
+        lines.append(paint(f"{GUTTER}{cell.note}", "dim", theme))
     return Rendered(lines, len(lines))
 
 

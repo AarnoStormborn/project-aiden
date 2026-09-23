@@ -18,6 +18,7 @@ from .types import ToolContext, ToolResult
 
 class GlobTool:
     name = "glob"
+    mutating = False
 
     def spec(self) -> ToolSpec:
         return ToolSpec(

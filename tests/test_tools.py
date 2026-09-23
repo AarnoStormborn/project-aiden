@@ -43,8 +43,17 @@ def ctx(project: Path, tmp_path: Path) -> ToolContext:
 # --------------------------------------------------------------------------- registry
 
 
-def test_registry_exposes_the_three_read_only_tools():
-    assert set(TOOLS) == {"read", "grep", "glob"}
+def test_registry_exposes_the_expected_tools():
+    assert set(TOOLS) == {"read", "grep", "glob", "edit", "write"}
+
+
+def test_only_the_write_tools_are_marked_mutating():
+    """The flag drives policy and approval, so a mislabelled tool is a security bug."""
+    from aiden.tools import MUTATING_TOOLS
+
+    assert MUTATING_TOOLS == {"edit", "write"}
+    for name, tool in TOOLS.items():
+        assert getattr(tool, "mutating", None) is (name in MUTATING_TOOLS)
 
 
 def test_specs_are_valid_json_schema_shapes():

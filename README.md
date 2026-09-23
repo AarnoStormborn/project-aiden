@@ -22,7 +22,8 @@ mainstream harnesses do not:
 | **TUI — inline streaming renderer** | **done, snapshot-tested, perf budget enforced** |
 | **TUI — interactive session + keymap** | **done — `aiden tui`, `/` commands, configurable chords** |
 | **TUI — markdown rendering, session replay, resume** | **done — `--render`, `--resume <id>`** |
-| TUI overlays (alt-screen review, transcript pager, approval) | next |
+| **Write capability — edit/write, guards, checkpoints, approval** | **done — see `docs/plan/v0.2a-write-capability.md`** |
+| `bash`, compaction, the learning subsystem | next |
 
 ## Quick start
 
@@ -94,6 +95,10 @@ overrides:
 | `AIDEN_TRUECOLOR` | auto | `on`/`off` for 24-bit colour |
 | `AIDEN_ANIMATIONS` | auto | set `off` to disable spinners |
 | `AIDEN_KEYS_FILE` | `$AIDEN_HOME/keys.toml` | keymap overrides |
+| `AIDEN_WRITE_ALLOW` | unset | extra writable globs, e.g. `generated/**,vendor/*` |
+| `AIDEN_ALLOW_WRITES` | unset | non-interactive runs write without asking (off by default) |
+| `AIDEN_CHECKPOINT_DIR` | `$AIDEN_HOME/checkpoints` | pre-image snapshots for undo |
+| `AIDEN_CHECKPOINT_KEEP` | `20` | turns of undo history kept per session |
 
 Sessions live in `~/.aiden/sessions/--<project-path>--/` — deliberately outside the repo so
 transcripts can never be committed. `providers.toml` is gitignored because it can hold keys.
@@ -108,7 +113,10 @@ aiden/
   session.py     append-only JSONL entry tree (the transcript is the product)
   prompts.py     immutable versioned base prompt + content hash
   loop.py        turn state machine, tool dispatch, ceilings, wrap-up nudge
-  tools/         read, grep, glob + path guard, budgets, spill
+  tools/         read, grep, glob, edit, write + path guard, policy, budgets, spill
+  approval.py    who may decide a change; deny-by-default when nobody can be asked
+  checkpoint.py  pre-image snapshots, so /undo is a lookup
+  diffutil.py    diff computation (used by the approval prompt and the transcript)
   tui/           inline streaming renderer (theme, model, render, stream, writer, driver)
   providers/     L1 transport: IR, catalog, auth, 3 wire protocols (+ quirk layer)
   cli/           `aiden` command line (ask, providers, sessions)

@@ -78,6 +78,31 @@ class Diagnostic:
 
 
 @dataclass(slots=True)
+class ApprovalRequested:
+    """A mutating tool wants to change the working tree.
+
+    Rendered as a diff before the decision, because an approval prompt that shows only "allow?" is
+    a prompt that trains the user to say yes to nothing (research/06 §What great agent UIs do #9).
+    """
+
+    call_id: str
+    name: str
+    path: str
+    diff: str
+    sensitive: bool = False
+    reason: str = ""
+
+
+@dataclass(slots=True)
+class ApprovalResolved:
+    call_id: str
+    approved: bool
+    #: How the decision was made: "user", "auto" (non-interactive default), or "flag".
+    decided_by: str = "user"
+    note: str = ""
+
+
+@dataclass(slots=True)
 class UsageUpdated:
     usage: Usage
     cost_usd: float
@@ -96,7 +121,9 @@ class RunFinished:
 
 
 Event = (
-    RunStarted
+    ApprovalRequested
+    | ApprovalResolved
+    | RunStarted
     | TurnStarted
     | TextDelta
     | ThinkingDelta

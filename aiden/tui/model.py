@@ -19,6 +19,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from ..events import (
+    ApprovalRequested,
+    ApprovalResolved,
     Diagnostic,
     Event,
     RunFinished,
@@ -92,6 +94,20 @@ class ToolCall(Cell):
     def hidden_line_count(self) -> int:
         total = len(self.output.splitlines())
         return max(0, total - self.visible_lines)
+
+
+@dataclass(slots=True)
+class Approval(Cell):
+    """A proposed change awaiting, or having received, a decision."""
+
+    call_id: str = ""
+    name: str = ""
+    path: str = ""
+    diff: str = ""
+    sensitive: bool = False
+    decided_by: str = ""
+    note: str = ""
+    status: str = PENDING
 
 
 @dataclass(slots=True)
@@ -180,6 +196,26 @@ class Transcript:
             call.status = ERROR if event.is_error else OK
             if event.output:
                 call.output = event.output
+        elif isinstance(event, ApprovalRequested):
+            self._close_assistant()
+            self._add(
+                Approval(
+                    call_id=event.call_id,
+                    name=event.name,
+                    path=event.path,
+                    diff=event.diff,
+                    sensitive=event.sensitive,
+                    note=event.reason,
+                )
+            )
+        elif isinstance(event, ApprovalResolved):
+            for cell in self.cells:
+                if isinstance(cell, Approval) and cell.call_id == event.call_id:
+                    cell.status = OK if event.approved else ERROR
+                    cell.decided_by = event.decided_by
+                    if event.note:
+                        cell.note = event.note
+                    break
         elif isinstance(event, Diagnostic):
             self._add(Notice(text=event.message, level=event.level))
         elif isinstance(event, UsageUpdated):

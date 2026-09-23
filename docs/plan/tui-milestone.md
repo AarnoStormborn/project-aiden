@@ -192,7 +192,7 @@ while True:
     try:
         return asyncio.run(session.run())
     except KeyboardInterrupt:
-        session.interrupted()      # abort the driver, acknowledge, make it reusable
+        session.interrupted()  # abort the driver, acknowledge, make it reusable
 ```
 
 `TUIDriver.recover()` drops the live-region bookkeeping rather than patching it: after an interrupt

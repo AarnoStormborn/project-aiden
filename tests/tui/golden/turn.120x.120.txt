@@ -20,6 +20,8 @@ The budgets are:
 
 [!] output budget exhausted by reasoning
 
+[ok] edit → aiden/config.py (applied)
+
 
 READ_MAX_BYTES is 16_384 and READ_MAX_LINES is 400.
 

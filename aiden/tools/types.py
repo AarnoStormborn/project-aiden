@@ -74,6 +74,15 @@ class ToolContext:
     cwd: Path
     read_state: ReadState = field(default_factory=ReadState)
     spill_dir: Path | None = None
+    #: Path rules for mutating tools. Imported lazily to avoid a cycle at module load.
+    write_policy: Any = None
+
+    def policy(self) -> Any:
+        if self.write_policy is None:
+            from .policy import WritePolicy
+
+            self.write_policy = WritePolicy.from_env()
+        return self.write_policy
 
 
 class Tool(Protocol):
@@ -81,12 +90,36 @@ class Tool(Protocol):
 
     name: str
 
+    #: True when the tool can change the working tree. Mutating tools are gated by policy and
+    #: approval.
+    mutating: bool
+
+    # Mutating tools additionally define ``preview(args, ctx) -> str | None``, returning the diff a
+    # call would produce so approval can show it. It is deliberately *not* a Protocol member: a
+    # read-only tool has nothing to preview, and forcing every tool to declare a no-op would be
+    # noise. Callers use ``preview_of()`` below, which returns None when there is none.
+
     def spec(self) -> ToolSpec: ...
 
     def run(self, args: dict[str, Any], ctx: ToolContext) -> ToolResult: ...
 
 
 # --------------------------------------------------------------------------- path guard
+
+
+def preview_of(tool: Tool, args: dict[str, Any], ctx: ToolContext) -> str | None:
+    """The diff ``tool`` would produce for ``args``, or ``None`` when there is nothing to show."""
+    if not getattr(tool, "mutating", False):
+        return None
+    preview = getattr(tool, "preview", None)
+    if preview is None:
+        return None
+    try:
+        return preview(args, ctx)
+    except Exception:
+        # A preview that raises must not block a legitimate change, and must not fake one either:
+        # returning None means "no preview", and the tool's own guards still apply.
+        return None
 
 
 def resolve_in_cwd(raw: str, cwd: Path) -> tuple[Path | None, str]:

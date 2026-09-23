@@ -6,7 +6,10 @@ from pathlib import Path
 
 import pytest
 
+from aiden.diffutil import unified
 from aiden.events import (
+    ApprovalRequested,
+    ApprovalResolved,
     Diagnostic,
     RunFinished,
     RunStarted,
@@ -76,6 +79,14 @@ def realistic_turn() -> list:
             output="no matches for /TODO/ in .",
         ),
         Diagnostic(message="output budget exhausted by reasoning", level="warning"),
+        # An approval, so the diff cell is snapshot-tested at every width alongside the rest.
+        ApprovalRequested(
+            call_id="c3",
+            name="edit",
+            path="aiden/config.py",
+            diff=unified("READ_MAX_LINES = 400\n", "READ_MAX_LINES = 500\n", "aiden/config.py"),
+        ),
+        ApprovalResolved(call_id="c3", approved=True, decided_by="user"),
         TextDelta(text="\nREAD_MAX_BYTES is 16_384 and READ_MAX_LINES is 400.\n"),
         RunFinished(
             stop_reason="end_turn",

@@ -56,6 +56,23 @@ Acceptance asserts **correctness only**. Efficiency is reported, not asserted: r
 the same question varied between 11 and 17 tool calls, so a single-sample bound would be flaky.
 Efficiency gates need median-of-3 paired runs (`docs/research/05-benchmarks-evals.md`).
 
+## Writing files
+
+Aiden can change the working tree through `edit` and `write`. Both go through the same chain:
+schema → read-before-edit (content hash) → unique match → path policy → **approval** → apply →
+parse gate. Every step returns an error *result* the model can read, never an exception.
+
+Rules that must not be relaxed without updating `docs/plan/v0.2a-write-capability.md`:
+
+1. **A run with nobody to ask cannot write.** Non-interactive runs deny by default; `--allow-writes`
+   is the explicit opt-in, and it records `decided_by=flag` so the transcript does not imply the user
+   approved it.
+2. **Deny beats allow.** `.git/**` is never writable. A hook or a policy must not be able to upgrade
+   a decision.
+3. **A checkpoint exists before any change**, and it is captured *after* the decision so declined
+   proposals leave nothing behind.
+4. **Every decision is logged** (`approval` entries), because the transcript is the audit trail.
+
 ## Hard rules
 
 1. **Never commit credentials.** `~/.aiden/auth.json` (0600) holds them; `providers.toml` is

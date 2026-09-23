@@ -245,6 +245,16 @@ class TUIDriver:
 
     # ------------------------------------------------------------------ lifecycle
 
+    def before_prompt(self) -> None:
+        """Hand the terminal over to an external prompt.
+
+        The approval question is asked while the loop is mid-turn, so the live region is on screen
+        and the writer still believes it owns those rows. Erasing it first means the prompt is not
+        drawn over a frame that will later be repainted as if nothing happened.
+        """
+        self._emit(self.region.plan([]))
+        self.region.forget()
+
     def recover(self) -> None:
         """Make the driver reusable after an interrupted run.
 

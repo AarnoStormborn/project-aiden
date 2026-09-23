@@ -42,6 +42,13 @@ SESSIONS_DIR = Path(os.environ.get("AIDEN_SESSIONS_DIR", AIDEN_HOME / "sessions"
 #: with the path in the message").
 SPILL_DIR = Path(os.environ.get("AIDEN_SPILL_DIR", AIDEN_HOME / "spill"))
 
+#: Pre-image snapshots for undo. One directory per session, one per turn, holding only the files
+#: that turn actually modified (aiden/checkpoint.py).
+CHECKPOINT_DIR = Path(os.environ.get("AIDEN_CHECKPOINT_DIR", AIDEN_HOME / "checkpoints"))
+
+#: How many turns of undo history to keep per session.
+CHECKPOINT_KEEP = int(os.environ.get("AIDEN_CHECKPOINT_KEEP", 20))
+
 AUTH_FILE = Path(os.environ.get("AIDEN_AUTH_FILE", AIDEN_HOME / "auth.json"))
 
 
@@ -123,5 +130,5 @@ KEEP_RECENT_TOKENS = 20_000
 
 def ensure_dirs() -> None:
     """Create the runtime directories. Safe to call repeatedly."""
-    for path in (AIDEN_HOME, SESSIONS_DIR, SPILL_DIR):
+    for path in (AIDEN_HOME, SESSIONS_DIR, SPILL_DIR, CHECKPOINT_DIR):
         path.mkdir(parents=True, exist_ok=True)

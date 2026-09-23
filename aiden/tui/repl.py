@@ -25,29 +25,45 @@ from pathlib import Path
 from typing import Any
 
 from .. import config
+from ..checkpoint import CheckpointStore
 from ..loop import LoopResult, run_loop
 from ..providers import ProviderSuite
 from ..session import SessionStore, list_sessions
+from .approval_ui import PromptApprover
 from .driver import TUIDriver
 from .keys import Keymap
 
 PROMPT = "› "
 CONTINUATION = "  "
 
-HELP_TEXT = """\
-aiden — interactive session
+#: Every local command, with the line shown by /help. The *only* place a command is declared:
+#: the help text and ``Command.known`` are both derived from it, so a handler cannot be wired up
+#: without also being registered — which is exactly how `/undo` shipped as unreachable dead code.
+COMMANDS: dict[str, str] = {
+    "help": "this text",
+    "model": "show or set the model (provider/model[:thinking])",
+    "turns": "set the turn ceiling for the next question",
+    "cost": "spend so far this session",
+    "transcript": "reprint this session's questions and answers",
+    "sessions": "list recorded sessions for this project",
+    "keys": "show the key bindings",
+    "clear": "forget the in-session transcript (does not delete the log)",
+    "undo": "revert the files changed by the last turn",
+    "quit": "leave (also Ctrl-D)",
+}
 
-  /help              this text
-  /model [ref]       show or set the model (provider/model[:thinking])
-  /turns N           set the turn ceiling for the next question
-  /cost              spend so far this session
-  /transcript        reprint this session's questions and answers
-  /sessions          list recorded sessions for this project
-  /keys              show the key bindings
-  /clear             forget the in-session transcript (does not delete the log)
-  /quit              leave (also Ctrl-D)
 
-Anything else is sent to the model. Ctrl-C interrupts a running turn."""
+def _help_text() -> str:
+    width = max(len(name) for name in COMMANDS)
+    lines = ["aiden — interactive session", ""]
+    for name, description in COMMANDS.items():
+        lines.append(f"  /{name.ljust(width)}   {description}")
+    lines.append("")
+    lines.append("Anything else is sent to the model. Ctrl-C interrupts a running turn.")
+    return "\n".join(lines)
+
+
+HELP_TEXT = _help_text()
 
 
 @dataclass(slots=True)
@@ -60,20 +76,6 @@ class Command:
     @property
     def known(self) -> bool:
         return self.name in COMMANDS
-
-
-COMMANDS = {
-    "help",
-    "model",
-    "turns",
-    "cost",
-    "transcript",
-    "sessions",
-    "keys",
-    "clear",
-    "quit",
-    "exit",
-}
 
 
 def parse_command(line: str) -> Command | None:
@@ -136,6 +138,8 @@ class AidenSession:
         self.store = SessionStore.create(cwd=self.cwd, model=self.model_ref)
         self.resume_path = resume
         self._banner_shown = False
+        self.checkpoints = CheckpointStore(self.store.session_id, cwd=self.cwd)
+        self.approver = PromptApprover(driver=self.driver)
         if resume is not None:
             # Resuming keeps writing to the same log, so the transcript stays one story rather
             # than forking into a second file the user has to reconcile.
@@ -234,6 +238,8 @@ class AidenSession:
             max_cost_usd=self.max_cost_usd,
             max_tokens=config.DEFAULT_MAX_TOKENS,
             thinking_level=config.DEFAULT_THINKING_LEVEL,
+            approver=self.approver,
+            checkpoints=self.checkpoints,
         )
         self.state.spent_usd += result.cost_usd
         self.state.turns_used += result.turns
@@ -243,38 +249,47 @@ class AidenSession:
 
     # ------------------------------------------------------------------ commands
 
+    def handlers(self) -> dict[str, Callable[[Command], None]]:
+        """Handler per command. Its keys must equal ``COMMANDS`` — see the guard test."""
+        return {
+            "help": lambda _command: self._say(HELP_TEXT),
+            "model": lambda command: self._command_model(command.argument),
+            "turns": lambda command: self._command_turns(command.argument),
+            "cost": lambda _command: self._command_cost(),
+            "transcript": lambda _command: self._command_transcript(),
+            "sessions": lambda _command: self._command_sessions(),
+            "keys": lambda _command: self._command_keys(),
+            "clear": lambda _command: self._command_clear(),
+            "undo": lambda _command: self._command_undo(),
+            "quit": lambda _command: None,  # handled by the caller, which returns from run()
+        }
+
     def _handle_command(self, command: Command) -> None:
-        if command.name == "help" or not command.known:
-            if not command.known:
-                self._say(f"unknown command /{command.name} — try /help")
+        handler = self.handlers().get(command.name)
+        if handler is None:
+            self._say(f"unknown command /{command.name} — try /help")
             self._say(HELP_TEXT)
             return
+        handler(command)
 
-        if command.name == "model":
-            self._command_model(command.argument)
-        elif command.name == "turns":
-            self._command_turns(command.argument)
-        elif command.name == "cost":
-            totals = self.session_totals()
-            # Reported from the session log, not from in-memory counters. An interrupted run never
-            # returns from `_ask`, so counters drift low — the log recorded the real cost, and the
-            # HUD must not under-report what was actually spent.
-            self._say(
-                f"spent ${totals['cost_usd']:.4f} · {totals['turns']} turns · "
-                f"{totals['tool_calls']} tool calls"
-            )
-            if totals["interrupted"]:
-                self._say(f"  ({totals['interrupted']} interrupted run(s) included)")
-        elif command.name == "transcript":
-            self._command_transcript()
-        elif command.name == "sessions":
-            self._command_sessions()
-        elif command.name == "keys":
-            for chord, action in self.keymap.help_rows():
-                self._say(f"  {chord:18} {action}")
-        elif command.name == "clear":
-            self.state.history.clear()
-            self._say("in-session transcript cleared (the session log is untouched)")
+    def _command_cost(self) -> None:
+        totals = self.session_totals()
+        # Reported from the session log, not from in-memory counters. An interrupted run never
+        # returns from `_ask`, so counters drift low — the log recorded the real cost.
+        self._say(
+            f"spent ${totals['cost_usd']:.4f} · {totals['turns']} turns · "
+            f"{totals['tool_calls']} tool calls"
+        )
+        if totals["interrupted"]:
+            self._say(f"  ({totals['interrupted']} interrupted run(s) included)")
+
+    def _command_keys(self) -> None:
+        for chord, action in self.keymap.help_rows():
+            self._say(f"  {chord:18} {action}")
+
+    def _command_clear(self) -> None:
+        self.state.history.clear()
+        self._say("in-session transcript cleared (the session log is untouched)")
 
     def _command_model(self, argument: str) -> None:
         if not argument:
@@ -344,6 +359,22 @@ class AidenSession:
             "tool_calls": calls,
             "interrupted": interrupted,
         }
+
+    def _command_undo(self) -> None:
+        """Revert the files changed by the most recent turn."""
+        checkpoint = self.checkpoints.latest()
+        if checkpoint is None:
+            self._say("nothing to undo: no files have been changed in this session")
+            return
+        changed = self.checkpoints.restore(checkpoint)
+        if not changed:
+            self._say(f"turn {checkpoint.turn} changed no files that still exist")
+            return
+        self._say(f"reverted turn {checkpoint.turn}:")
+        for path in changed:
+            self._say(f"  {path}")
+        # The revert changes files behind the model's back, so its read hashes are now wrong.
+        self.driver.recover()
 
     def _command_transcript(self) -> None:
         if not self.state.history:

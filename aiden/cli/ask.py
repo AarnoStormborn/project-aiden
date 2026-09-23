@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 from .. import config
+from ..approval import default_approver
 from ..events import Diagnostic, TextDelta, ThinkingDelta
 from ..loop import run_loop
 from ..providers import ProviderError, ProviderSuite
@@ -154,6 +155,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="inline TUI (auto = on when stdout is a terminal)",
     )
     parser.add_argument("--system-prompt", type=Path, default=None, help="override the base prompt")
+    parser.add_argument(
+        "--allow-writes",
+        action="store_true",
+        help="apply file changes without asking (non-interactive runs refuse writes by default)",
+    )
     return parser
 
 
@@ -202,6 +208,9 @@ async def _run(
 
     session = None if args.no_session else SessionStore.create(cwd=cwd, model=model.model.ref)
     system_prompt = args.system_prompt.read_text() if args.system_prompt else None
+    # A piped or scripted run has nobody to ask, so it must not write unless told to. The TUI
+    # supplies its own interactive approver; `aiden ask` never prompts.
+    approver = default_approver(interactive=False, allow_writes=args.allow_writes)
 
     try:
         with interrupt:
@@ -217,6 +226,7 @@ async def _run(
                 max_tokens=args.max_tokens,
                 thinking_level=model.thinking_level or args.thinking,
                 system_prompt=system_prompt,
+                approver=approver,
             )
     except ProviderError as exc:
         print(f"\nerror: {exc}", file=sys.stderr)

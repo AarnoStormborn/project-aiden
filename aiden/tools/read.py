@@ -19,6 +19,7 @@ DEFAULT_LIMIT = config.READ_MAX_LINES
 
 class ReadTool:
     name = "read"
+    mutating = False
 
     def spec(self) -> ToolSpec:
         return ToolSpec(

@@ -20,7 +20,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import config, prompts
+from .approval import Approver, DenyAll
+from .checkpoint import Checkpoint, CheckpointStore
 from .events import (
+    ApprovalRequested,
+    ApprovalResolved,
     Diagnostic,
     EventSink,
     NullSink,
@@ -36,6 +40,7 @@ from .events import (
 from .providers import Message, ProviderSuite, ToolResultPart
 from .providers.types import Completion, ModelInfo, Part, ToolCallPart, Usage
 from .session import (
+    ENTRY_APPROVAL,
     ENTRY_ASSISTANT,
     ENTRY_DIAGNOSTIC,
     ENTRY_RUN_END,
@@ -44,7 +49,15 @@ from .session import (
     ENTRY_USER,
     SessionStore,
 )
-from .tools import ToolContext, execute, tool_specs
+from .tools import (
+    MUTATING_TOOLS,
+    TOOLS,
+    ToolContext,
+    ToolResult,
+    execute,
+    preview_of,
+    tool_specs,
+)
 
 
 @dataclass(slots=True)
@@ -79,6 +92,8 @@ async def run_loop(
     max_tokens: int = config.DEFAULT_MAX_TOKENS,
     thinking_level: str | None = config.DEFAULT_THINKING_LEVEL,
     system_prompt: str | None = None,
+    approver: Approver | None = None,
+    checkpoints: CheckpointStore | None = None,
 ) -> LoopResult:
     """Ask a question about the repository and return the answer plus a cost report."""
     sink = sink or NullSink()
@@ -88,6 +103,12 @@ async def run_loop(
     owned_session = session is None
     session = session or SessionStore.create(cwd=cwd, model=info.ref)
     ctx = ToolContext(cwd=cwd, spill_dir=config.SPILL_DIR)
+    # Mutating tools are refused unless something explicitly allows them: a run with nobody to ask
+    # must not be able to write (aiden/approval.py).
+    resolved_approver: Approver = approver or DenyAll()
+    checkpoint_store = checkpoints or CheckpointStore(session.session_id, cwd=cwd)
+    checkpoint: Checkpoint | None = None
+    checkpoint_taken_for: int = -1
 
     result = LoopResult(session_path=str(session.path))
     sink.emit(
@@ -133,8 +154,25 @@ async def run_loop(
             for call in calls:
                 if call.truncated:
                     tool_results.append(_skipped_result(call, sink, session))
-                else:
-                    tool_results.append(_execute_one(call, ctx, result, sink, session))
+                    continue
+                # A checkpoint covers the whole turn, taken lazily before its first mutation, so
+                # undo restores the state before the turn rather than before the last edit.
+                if call.name in MUTATING_TOOLS and checkpoint_taken_for != turn:
+                    checkpoint = checkpoint_store.begin(turn)
+                    checkpoint_store.prune(config.CHECKPOINT_KEEP)
+                    checkpoint_taken_for = turn
+                tool_results.append(
+                    await _execute_one(
+                        call,
+                        ctx,
+                        result,
+                        sink,
+                        session,
+                        approver=resolved_approver,
+                        checkpoint_store=checkpoint_store,
+                        checkpoint=checkpoint,
+                    )
+                )
             messages.append(Message(role="tool", content=tool_results))
 
             # Budget awareness: near the ceiling, tell the model to answer with what it has.
@@ -304,23 +342,41 @@ def _skipped_result(call: ToolCallPart, sink: EventSink, session: SessionStore) 
     return ToolResultPart(call_id=call.id, output=message, is_error=True)
 
 
-def _execute_one(
+async def _execute_one(
     call: ToolCallPart,
     ctx: ToolContext,
     result: LoopResult,
     sink: EventSink,
     session: SessionStore,
+    *,
+    approver: Approver,
+    checkpoint_store: CheckpointStore | None = None,
+    checkpoint: Checkpoint | None = None,
 ) -> ToolResultPart:
     """Run one tool call, emit its events, record it, and return its result.
 
     Called in call order (not completion order) so the transcript stays deterministic and the
     prompt cache stays warm ([r01] §tools).
+
+    A mutating tool goes through the rest of the chain first — preview, checkpoint, approval — and
+    only then executes. Nothing about that ordering is incidental: the checkpoint must exist before
+    the change, and the approval must see the diff before the decision.
     """
     result.tool_calls += 1
     sink.emit(ToolCallStarted(call_id=call.id, name=call.name, arguments=call.arguments))
 
+    rejection = await _gate_mutation(
+        call,
+        ctx,
+        sink,
+        session,
+        approver=approver,
+        checkpoint_store=checkpoint_store,
+        checkpoint=checkpoint,
+    )
+
     started = time.perf_counter()
-    tool_result = execute(call.name, call.arguments, ctx)
+    tool_result = rejection if rejection is not None else execute(call.name, call.arguments, ctx)
     duration_ms = int((time.perf_counter() - started) * 1000)
     rendered = tool_result.render()
 
@@ -347,6 +403,90 @@ def _execute_one(
         },
     )
     return ToolResultPart(call_id=call.id, output=rendered, is_error=tool_result.is_error)
+
+
+async def _gate_mutation(
+    call: ToolCallPart,
+    ctx: ToolContext,
+    sink: EventSink,
+    session: SessionStore,
+    *,
+    approver: Approver,
+    checkpoint_store: CheckpointStore | None,
+    checkpoint: Checkpoint | None,
+) -> ToolResult | None:
+    """Policy, checkpoint and approval for a mutating call.
+
+    Returns a rejection result when the change must not happen, or ``None`` to proceed. A no-op
+    preview means the tool is about to refuse anyway (bad path, missing match, stale read), so there
+    is nothing to ask a human about — the tool's own error result is the right answer.
+    """
+    if call.name not in MUTATING_TOOLS:
+        return None
+
+    diff = preview_of(TOOLS[call.name], call.arguments, ctx)
+    if diff is None:
+        return None
+
+    path = str(call.arguments.get("path", ""))
+    _resolved, decision = ctx.policy().check(path, ctx.cwd)
+    if not decision.allowed:
+        return ToolResult.error(decision.reason)
+
+    sink.emit(
+        ApprovalRequested(
+            call_id=call.id,
+            name=call.name,
+            path=path,
+            diff=diff,
+            sensitive=decision.sensitive,
+            reason=str(call.arguments.get("reason", "")),
+        )
+    )
+    verdict = await approver.request(
+        name=call.name,
+        path=path,
+        diff=diff,
+        sensitive=decision.sensitive,
+        reason=str(call.arguments.get("reason", "")),
+    )
+    sink.emit(
+        ApprovalResolved(
+            call_id=call.id,
+            approved=verdict.approved,
+            decided_by=verdict.decided_by,
+            note=verdict.note,
+        )
+    )
+    session.append(
+        ENTRY_APPROVAL,
+        {
+            "call_id": call.id,
+            "name": call.name,
+            "path": path,
+            "approved": verdict.approved,
+            "decided_by": verdict.decided_by,
+            "note": verdict.note,
+            "diff_lines": len(diff.splitlines()),
+        },
+    )
+
+    if verdict.approved:
+        # Checkpoint after the decision but before the change. Capturing earlier also works, but it
+        # leaves empty checkpoints for every declined proposal, and `/undo` then walks through turns
+        # that changed nothing.
+        if checkpoint is not None and checkpoint_store is not None:
+            resolved, _ = ctx.policy().check(path, ctx.cwd)
+            if resolved is not None:
+                checkpoint_store.capture(checkpoint, resolved)
+        return None
+
+    # The reason travels with the refusal so the model can adapt rather than retry identically.
+    reason = verdict.note or "the user declined this change"
+    return ToolResult.error(
+        f"{call.name} on {path} was declined and NOT applied: {reason}\n"
+        "Do not retry the same change. Ask what to do differently, or propose an alternative."
+    )
 
 
 def _wrap_up_notice(remaining: int) -> str:

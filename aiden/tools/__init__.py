@@ -14,13 +14,21 @@ from __future__ import annotations
 from typing import Any
 
 from ..providers.types import ToolSpec
+from .edit import EditTool
 from .glob import GlobTool
 from .grep import GrepTool
+from .policy import WritePolicy
 from .read import ReadTool
-from .types import ReadState, Tool, ToolContext, ToolResult
+from .types import ReadState, Tool, ToolContext, ToolResult, preview_of
+from .write import WriteTool
 
 #: Registered tools by name. Adding one is a single entry here plus a `spec()`.
-TOOLS: dict[str, Tool] = {tool.name: tool for tool in (ReadTool(), GrepTool(), GlobTool())}
+TOOLS: dict[str, Tool] = {
+    tool.name: tool for tool in (ReadTool(), GrepTool(), GlobTool(), EditTool(), WriteTool())
+}
+
+#: Tools that can change the working tree, and therefore need policy plus approval.
+MUTATING_TOOLS = frozenset(name for name, tool in TOOLS.items() if getattr(tool, "mutating", False))
 
 
 def tool_specs() -> list[ToolSpec]:
@@ -53,7 +61,9 @@ def execute(name: str, arguments: Any, ctx: ToolContext) -> ToolResult:
 
 
 __all__ = [
+    "MUTATING_TOOLS",
     "TOOLS",
+    "EditTool",
     "GlobTool",
     "GrepTool",
     "ReadState",
@@ -61,6 +71,9 @@ __all__ = [
     "Tool",
     "ToolContext",
     "ToolResult",
+    "WritePolicy",
+    "WriteTool",
     "execute",
+    "preview_of",
     "tool_specs",
 ]

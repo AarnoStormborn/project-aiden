@@ -28,6 +28,8 @@ ENTRY_ASSISTANT = "assistant_message"
 ENTRY_TOOL_RESULT = "tool_result"
 ENTRY_USAGE = "usage"
 ENTRY_DIAGNOSTIC = "diagnostic"
+#: An approval decision, recorded because the transcript is the audit trail.
+ENTRY_APPROVAL = "approval"
 ENTRY_RUN_END = "run_end"
 
 

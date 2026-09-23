@@ -393,3 +393,53 @@ async def test_cost_is_read_from_the_log_not_from_counters(session):
     assert "spent $" in body
     # With no completed runs there is nothing to report, and it says so rather than inventing.
     assert "$0.0000" in body
+
+
+# --------------------------------------------------------------------------- command registry
+
+
+def test_every_handler_is_a_registered_command(session):
+    """Regression: `/undo` shipped with a handler that could never run.
+
+    The dispatch chain was added but the command was not registered, so `Command.known` was False,
+    the handler was unreachable, and the command silently printed help instead. Helpers now come from
+    one table and this test pins the two together.
+    """
+    from aiden.tui.repl import COMMANDS
+
+    repl, _lines, _out = session
+    handlers = set(repl.handlers())
+    assert handlers == set(COMMANDS), (
+        f"handlers without a command: {handlers - set(COMMANDS)}; "
+        f"commands without a handler: {set(COMMANDS) - handlers}"
+    )
+
+
+def test_help_lists_every_registered_command(session):
+    from aiden.tui.repl import COMMANDS, HELP_TEXT
+
+    for name in COMMANDS:
+        assert f"/{name}" in HELP_TEXT, f"/{name} is registered but not documented"
+
+
+async def test_undo_with_nothing_to_undo_says_so(session):
+    repl, lines, out = session
+    lines.extend(["/undo", "/quit"])
+    await repl.run()
+    assert any("nothing to undo" in line for line in out)
+
+
+async def test_undo_reverts_the_last_turn(session, tmp_path):
+    """End to end through the REPL: a change, then /undo, file back to its pre-turn state."""
+    repl, lines, out = session
+    target = repl.cwd / "notes.md"
+
+    checkpoint = repl.checkpoints.begin(1)
+    repl.checkpoints.capture(checkpoint, target)
+    target.write_text("changed by the agent\n")
+
+    lines.extend(["/undo", "/quit"])
+    await repl.run()
+
+    assert not target.exists(), "a file created during the turn must be removed by /undo"
+    assert any("reverted turn 1" in line for line in out)

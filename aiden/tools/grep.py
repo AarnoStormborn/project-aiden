@@ -53,6 +53,7 @@ RG_TIMEOUT_S = 20
 
 class GrepTool:
     name = "grep"
+    mutating = False
 
     def spec(self) -> ToolSpec:
         return ToolSpec(

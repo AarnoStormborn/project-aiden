@@ -40,6 +40,17 @@ def render_cell(cell: model.Cell, width: int, theme: Theme) -> list[str]:
         lines.extend(cell.output.splitlines())
         lines.append("")
         return lines
+    if isinstance(cell, model.Approval):
+        status = {"pending": "awaiting approval", "ok": "applied", "error": "declined"}.get(
+            cell.status, cell.status
+        )
+        lines = [f"[approval] {cell.name} -> {cell.path} ({status})"]
+        if cell.status == "pending":
+            lines.extend(cell.diff.splitlines())
+        if cell.note:
+            lines.append(cell.note)
+        lines.append("")
+        return lines
     if isinstance(cell, model.Notice):
         return [f"[{cell.level}] {cell.text}", ""]
     if isinstance(cell, model.TurnMarker):
