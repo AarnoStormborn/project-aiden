@@ -179,7 +179,14 @@ def _tool_call(cell: model.ToolCall, width: int, theme: Theme, caps: TerminalCap
         model.RUNNING: "tool_pending",
         model.ABORTED: "tool_err",
     }.get(cell.status, "tool_pending")
-    header = f"{glyph} {cell.name}({args}){timing}{suffix}"
+    # Build the header so the *suffix* survives: at a narrow width an over-long argument list used
+    # to push "(output truncated)" off the end, hiding the one piece of status the line carries.
+    head = f"{glyph} {cell.name}("
+    tail = f"){timing}{suffix}"
+    budget = width - len(head) - len(tail)
+    if len(args) > budget:
+        args = (args[: max(0, budget - 1)] + dot) if budget > 1 else ""
+    header = f"{head}{args}{tail}"
     path_arg = next(
         (v for k, v in cell.arguments.items() if k in {"path", "file"} and isinstance(v, str)),
         "",

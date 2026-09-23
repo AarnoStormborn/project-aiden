@@ -467,3 +467,36 @@ async def test_wrap_up_threshold_scales_down_for_short_budgets(isolated_sessions
     await run_loop("q", suite=suite, model="fake", cwd=project, sink=sink, max_turns=1)
     nudges = [d for d in sink.of(Diagnostic) if "[harness]" in d.message]
     assert not nudges, "a single-turn run has no room for a nudge"
+
+
+async def test_an_interrupted_run_is_recorded_as_aborted(isolated_sessions, project):
+    """Regression: a Ctrl-C'd run logged `end_turn`, so a replay showed no sign of the interrupt."""
+    import asyncio
+
+    class InterruptingSuite(FakeSuite):
+        async def complete(self, model, messages, tools=None, **kw):
+            raise asyncio.CancelledError
+
+    suite = InterruptingSuite([])
+    with pytest.raises(asyncio.CancelledError):
+        await run_loop("q", suite=suite, model="fake", cwd=project)
+
+    logs = list((isolated_sessions / "sessions").rglob("*.jsonl"))
+    assert logs, "the run should still have written a log"
+    entries = list(read_entries(logs[0]))
+    end = entries[-1]
+    assert end.type == ENTRY_RUN_END
+    assert end.payload["stop_reason"] == "aborted"
+
+
+async def test_a_keyboard_interrupt_is_also_recorded_as_aborted(isolated_sessions, project):
+    class InterruptingSuite(FakeSuite):
+        async def complete(self, model, messages, tools=None, **kw):
+            raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        await run_loop("q", suite=InterruptingSuite([]), model="fake", cwd=project)
+
+    logs = list((isolated_sessions / "sessions").rglob("*.jsonl"))
+    entries = list(read_entries(logs[0]))
+    assert entries[-1].payload["stop_reason"] == "aborted"

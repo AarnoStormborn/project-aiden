@@ -135,6 +135,7 @@ class AidenSession:
         self.state = SessionState(model=self.model_ref, max_turns=max_turns or config.MAX_TURNS)
         self.store = SessionStore.create(cwd=self.cwd, model=self.model_ref)
         self.resume_path = resume
+        self._banner_shown = False
         if resume is not None:
             # Resuming keeps writing to the same log, so the transcript stays one story rather
             # than forking into a second file the user has to reconcile.
@@ -182,15 +183,31 @@ class AidenSession:
     # ------------------------------------------------------------------ loop
 
     async def run(self) -> int:
-        """Read questions until EOF or /quit. Returns a process exit code."""
-        self._say(f"aiden · {self.state.model} · {self.cwd}")
-        self._say("type /help for commands, Ctrl-C to interrupt a turn, Ctrl-D to leave\n")
+        """Read questions until EOF or /quit. Returns a process exit code.
+
+        A SIGINT during a turn unwinds out of ``asyncio.run`` rather than out of this coroutine —
+        the exception is raised in the event loop's selector — so this loop cannot catch it and
+        does not try. The *session object* survives, and the CLI re-enters :meth:`run` after
+        calling :meth:`interrupted`. An earlier version installed an asyncio SIGINT handler to
+        cancel just the turn; it left the process unresponsive to all input, which is worse than
+        the bug it fixed.
+        """
+        if not self._banner_shown:
+            self._say(f"aiden · {self.state.model} · {self.cwd}")
+            self._say("type /help for commands, Ctrl-C to interrupt a turn, Ctrl-D to leave\n")
+            self._banner_shown = True
 
         while True:
             try:
                 line = await self._read_line()
-            except (EOFError, KeyboardInterrupt):
+            except EOFError:
                 return self._leave()
+            except KeyboardInterrupt:
+                # Ctrl-C *at the prompt* discards the line and stays in the session, which is what
+                # "/help" promises. Only Ctrl-D and /quit leave. An earlier version exited the
+                # whole session on either.
+                self._say("")
+                continue
             if line is None:
                 return self._leave()
             if not line.strip():
@@ -203,12 +220,7 @@ class AidenSession:
                 self._handle_command(command)
                 continue
 
-            try:
-                await self._ask(line)
-            except (EOFError, KeyboardInterrupt):
-                # Interrupting a turn returns to the prompt; the driver has already committed the
-                # partial answer and marked it aborted.
-                self._say("interrupted")
+            await self._ask(line)
 
     async def _ask(self, question: str) -> LoopResult:
         result = await run_loop(
@@ -243,10 +255,16 @@ class AidenSession:
         elif command.name == "turns":
             self._command_turns(command.argument)
         elif command.name == "cost":
+            totals = self.session_totals()
+            # Reported from the session log, not from in-memory counters. An interrupted run never
+            # returns from `_ask`, so counters drift low — the log recorded the real cost, and the
+            # HUD must not under-report what was actually spent.
             self._say(
-                f"spent ${self.state.spent_usd:.4f} · {self.state.turns_used} turns · "
-                f"{self.state.tool_calls} tool calls"
+                f"spent ${totals['cost_usd']:.4f} · {totals['turns']} turns · "
+                f"{totals['tool_calls']} tool calls"
             )
+            if totals["interrupted"]:
+                self._say(f"  ({totals['interrupted']} interrupted run(s) included)")
         elif command.name == "transcript":
             self._command_transcript()
         elif command.name == "sessions":
@@ -299,6 +317,34 @@ class AidenSession:
         self.state.max_turns = value
         self._say(f"turn ceiling: {value}")
 
+    def session_totals(self) -> dict[str, float]:
+        """Spend, turns and tool calls for this session, read from the log."""
+        from ..session import ENTRY_RUN_END, read_entries
+
+        cost = 0.0
+        turns = 0
+        calls = 0
+        interrupted = 0
+        try:
+            entries = list(read_entries(self.store.path))
+        except OSError:
+            entries = []
+        for entry in entries:
+            if entry.type != ENTRY_RUN_END:
+                continue
+            payload = entry.payload
+            cost += float(payload.get("cost_usd", 0.0) or 0.0)
+            turns += int(payload.get("turns", 0) or 0)
+            calls += int(payload.get("tool_calls", 0) or 0)
+            if payload.get("stop_reason") == "aborted":
+                interrupted += 1
+        return {
+            "cost_usd": cost,
+            "turns": turns,
+            "tool_calls": calls,
+            "interrupted": interrupted,
+        }
+
     def _command_transcript(self) -> None:
         if not self.state.history:
             self._say("nothing asked yet")
@@ -317,6 +363,17 @@ class AidenSession:
             self._say(
                 f"  {row['session_id']}  {row['entries']:>4} entries  {row['started_at'][:19]}"
             )
+
+    def interrupted(self) -> None:
+        """Recover after SIGINT tore down the event loop, so the session can continue.
+
+        The turn was cancelled part-way, so the transcript is marked aborted (partial answer kept)
+        and the live-region bookkeeping is dropped rather than patched: after an interrupt the
+        cursor may sit mid-frame and the writer's belief about the screen is no longer true.
+        """
+        self.driver.abort()
+        self._say("interrupted")
+        self.driver.recover()
 
     def _leave(self) -> int:
         self.driver.finish()

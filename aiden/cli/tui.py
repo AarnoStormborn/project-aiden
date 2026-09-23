@@ -77,14 +77,14 @@ def main(argv: list[str] | None = None) -> int:
         driver=driver,
         resume=resume_path,
     )
-    try:
-        return asyncio.run(session.run())
-    except KeyboardInterrupt:
-        # Ctrl-C at the prompt: same treatment as `aiden ask`, mark the transcript aborted and
-        # leave without a traceback.
-        driver.abort()
-        print("\ninterrupted", file=sys.stderr)
-        return 130
+    # SIGINT during a turn unwinds out of asyncio.run, not out of the session coroutine, so the
+    # loop is re-entered here with the same session object rather than caught inside it. Ctrl-C
+    # therefore interrupts the *turn*; Ctrl-D or /quit leave.
+    while True:
+        try:
+            return asyncio.run(session.run())
+        except KeyboardInterrupt:
+            session.interrupted()
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -14,6 +14,7 @@ transcript reproducible and the prompt cache warm, which matters more here than 
 
 from __future__ import annotations
 
+import asyncio
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -169,6 +170,13 @@ async def run_loop(
             sink.emit(Diagnostic(message=note, level="error"))
             session.append(ENTRY_DIAGNOSTIC, {"message": note, "level": "error"})
             result.stop_reason = "max_turns"
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        # An interrupted run must not be recorded as having ended normally. The log is the record
+        # of what happened, and `end_turn` would make a cancelled run look complete on replay —
+        # which is exactly how this was noticed: a replay of an interrupted session showed no sign
+        # that it had been interrupted. The driver has already committed the partial answer.
+        result.stop_reason = "aborted"
+        raise
     finally:
         session.append(
             ENTRY_RUN_END,

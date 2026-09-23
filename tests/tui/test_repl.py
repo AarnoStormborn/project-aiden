@@ -6,6 +6,7 @@ testable without a terminal or a provider.
 
 from __future__ import annotations
 
+import io
 from pathlib import Path
 
 import pytest
@@ -119,6 +120,7 @@ def session(tmp_path: Path, monkeypatch) -> tuple[AidenSession, list[str]]:
 
         def __init__(self) -> None:
             self.events: list = []
+            self.aborted = False
 
         def emit(self, event) -> None:
             self.events.append(event)
@@ -127,7 +129,10 @@ def session(tmp_path: Path, monkeypatch) -> tuple[AidenSession, list[str]]:
             return None
 
         def abort(self) -> None:
-            return None
+            self.aborted = True
+
+        def recover(self) -> None:
+            self.recovered = True
 
         @property
         def text(self) -> str:
@@ -282,3 +287,109 @@ async def test_model_command_hints_a_full_ref_for_a_bare_provider(session):
     body = "\n".join(out)
     assert "did you mean /model anthropic/example-model" in body
     assert repl.state.model == "fake/model", "a failed switch must not change the model"
+
+
+# --------------------------------------------------------------------------- interruption
+
+
+async def test_ctrl_c_at_the_prompt_stays_in_the_session(session):
+    """`/help` promises Ctrl-C interrupts a turn; at the prompt it must not end the session."""
+    repl, _lines, out = session
+
+    calls = {"n": 0}
+
+    def flaky(_prompt: str = "") -> str | None:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise KeyboardInterrupt
+        if calls["n"] == 2:
+            return "a real question"
+        return None  # EOF
+
+    repl._read = flaky
+    code = await repl.run()
+
+    assert code == 0
+    assert len(repl.state.history) == 1, "the session continued after Ctrl-C"
+    assert any("a real question" in q for q, _a in repl.state.history)
+    # The Ctrl-C itself is acknowledged (a blank line) rather than leaving a half-drawn prompt.
+    assert out, "the session should have written its banner before the interrupt"
+
+
+async def test_interrupted_recovers_the_session_for_another_run(session, monkeypatch):
+    """SIGINT tears down the event loop, not the session: the object survives and is reusable.
+
+    An earlier attempt installed an asyncio SIGINT handler to cancel just the turn. It left the
+    process unresponsive to all input, which is worse than the bug it fixed, so the CLI re-enters
+    `run()` instead.
+    """
+    repl, lines, out = session
+
+    async def interrupted_ask(_question: str):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(repl, "_ask", interrupted_ask)
+    lines.extend(["a question"])
+
+    with pytest.raises(KeyboardInterrupt):
+        await repl.run()
+
+    # What the CLI does next.
+    repl.interrupted()
+    assert repl.driver.aborted, "the driver must be told to commit partials"
+    assert "interrupted" in "\n".join(out)
+    assert repl.driver.recovered, "the driver must be made reusable for the next run"
+    # And the real driver does exactly that.
+    from aiden.events import RunStarted, TextDelta
+    from aiden.tui.driver import TUIDriver
+    from aiden.tui.theme import Theme
+
+    real = TUIDriver(out=io.StringIO(), theme=Theme(colour=False), width=80)
+    real.emit(RunStarted(session_id="s", model="m", question="q", cwd="/repo"))
+    real.emit(TextDelta(text="partial"))
+    real.abort()
+    real.recover()
+    assert real.region.drawn_lines == []
+    assert real.stream.text == ""
+
+    # And a subsequent run works, with state intact.
+    monkeypatch.setattr(repl, "_ask", lambda q: _answer(repl, q))
+    lines.extend(["second question", "/quit"])
+    assert await repl.run() == 0
+    # Only completed Q&A pairs are recorded: the interrupted question produced no answer, and
+    # pretending otherwise would put a half-answer into /transcript.
+    assert repl.state.history == [("second question", "the answer")]
+
+
+async def _answer(repl, question: str):
+    from aiden.loop import LoopResult
+
+    repl.state.history.append((question, "the answer"))
+    return LoopResult(answer="the answer")
+
+
+async def test_the_banner_is_shown_once_across_re_entries(session):
+    """Re-entering the loop after an interrupt must not reprint the banner."""
+    repl, lines, out = session
+    lines.extend(["/quit"])
+    await repl.run()
+    lines.clear()
+    await repl.run()
+    assert sum("type /help for commands" in line for line in out) == 1
+
+
+async def test_eof_leaves_the_session(session):
+    repl, lines, _out = session
+    lines.clear()  # immediate EOF (Ctrl-D)
+    assert await repl.run() == 0
+
+
+async def test_cost_is_read_from_the_log_not_from_counters(session):
+    """An interrupted run never returns from `_ask`, so counters drift low; the log does not."""
+    repl, lines, out = session
+    lines.extend(["/cost", "/quit"])
+    await repl.run()
+    body = "\n".join(out)
+    assert "spent $" in body
+    # With no completed runs there is nothing to report, and it says so rather than inventing.
+    assert "$0.0000" in body

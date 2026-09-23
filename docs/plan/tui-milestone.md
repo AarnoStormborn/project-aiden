@@ -174,6 +174,48 @@ One ordering bug was found here: replay emitted an assistant message's tool call
 text, so the prose landed after the tool cell and read as if the model only spoke once it had seen
 the result. Reconstruction now goes reasoning → prose → action.
 
+## Interruption, tested in a real terminal
+
+Testing the session by typing at it found that Ctrl-C **ended the whole session** instead of
+interrupting the turn, contradicting `/help` ("Ctrl-C interrupts a running turn"). The first fix
+was wrong in a more interesting way: an asyncio SIGINT handler that cancelled just the turn left
+the process **unresponsive to every kind of input** — worse than the bug it fixed. It was caught
+only because the test typed at it afterwards.
+
+The design that works is smaller: let SIGINT behave normally. The exception is raised in the event
+loop's *selector*, so it unwinds out of `asyncio.run` rather than out of the session coroutine —
+which means no handler in the coroutine can catch it. Instead the **session object survives**, and
+the CLI re-enters `run()`:
+
+```python
+while True:
+    try:
+        return asyncio.run(session.run())
+    except KeyboardInterrupt:
+        session.interrupted()      # abort the driver, acknowledge, make it reusable
+```
+
+`TUIDriver.recover()` drops the live-region bookkeeping rather than patching it: after an interrupt
+the cursor may sit mid-frame and the writer's belief about the screen is no longer true. Ctrl-C at
+the *prompt* discards the line and stays in the session; Ctrl-D and `/quit` leave.
+
+Three further findings from the same round:
+
+- **An interrupted run was logged as `end_turn`.** The log is the record of what happened, and a
+  replay of an interrupted session showed no sign of the interruption. `run_loop` now catches
+  `CancelledError`/`KeyboardInterrupt`, records `aborted`, and re-raises.
+- **`/cost` under-reported after an interrupt**, because it read in-memory counters and an
+  interrupted run never returns from `_ask`. It reads the session log now — the HUD must not
+  under-report what was actually spent. Verified against the log: `$0.0005 · 3 turns · 4 tool
+  calls (1 interrupted run(s) included)` matched the file exactly.
+- **A tool header's status suffix was clipped first at narrow widths** — `(output truncat…` — so
+  the one piece of status on the line was the first thing lost. The argument list is elided now and
+  the suffix survives.
+
+One thing that round was *not*: a bug. Two of my typed commands arrived mangled (`/quit` was
+delivered as `s/quit`) because I typed while the app was busy. That is a pty-testing artifact to
+watch for, not a product defect.
+
 ## Capability detection and hyperlinks (aiden/tui/caps.py)
 
 research/06 §What great agent UIs do #15 asks for capability detection *with user overrides*. The

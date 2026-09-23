@@ -245,6 +245,15 @@ class TUIDriver:
 
     # ------------------------------------------------------------------ lifecycle
 
+    def recover(self) -> None:
+        """Make the driver reusable after an interrupted run.
+
+        Resets rather than patches: the cursor may be mid-frame, and the previous frame no longer
+        describes what is on screen, so the next paint must start from a clean slate.
+        """
+        self.stream.reset()
+        self.region.forget()
+
     def resize(self, width: int) -> None:
         """A width change invalidates every wrapped line: full repaint is the sanctioned cost."""
         if width == self.width:
