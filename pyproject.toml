@@ -6,6 +6,8 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "httpx>=0.28",
+    "rich>=13.9",
+    "prompt_toolkit>=3.0.47",
 ]
 
 [project.scripts]
@@ -42,6 +44,15 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S", "SIM"]
 "scripts/**" = ["S", "T201"]  # scripts print by design
+# theme.py *is* the glyph table: the specific Unicode characters are the deliverable, and the
+# ambiguous-character rules would rewrite the design. render.py draws the same glyphs.
+"aiden/tui/theme.py" = ["RUF001", "RUF002", "RUF003"]
+"aiden/tui/render.py" = ["RUF001", "RUF002", "RUF003"]
+# the theme test asserts on the exact glyphs the theme must produce
+"tests/tui/test_theme.py" = ["RUF001"]
+# S106/S107 are false positives on `token=`/`style_token=` parameters, which name a theme
+# token, not a secret.
+"aiden/tui/*.py" = ["S106", "S107"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["aiden"]

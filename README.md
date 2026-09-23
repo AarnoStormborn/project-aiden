@@ -19,7 +19,8 @@ mainstream harnesses do not:
 | Architecture + ADRs (`docs/architecture/`) | done |
 | **Provider suite** (`aiden/providers/`) | **done — 42 providers, 3 wire protocols, live-verified** |
 | **v0.1 harness — read code, answer questions** | **done — acceptance 5/5, ~$0.015 per 5 questions** |
-| TUI (first product deliverable) | next — see `docs/research/06-ui-ux.md` |
+| **TUI — inline streaming renderer** | **core done, snapshot-tested — see `docs/plan/tui-milestone.md`** |
+| TUI input/overlays (keymap, review, sessions) | next |
 
 ## Quick start
 
@@ -28,8 +29,9 @@ uv sync
 uv run python scripts/dev_setup.py  # macOS: clears the hidden flag uv puts on .pth files
 uv run python -m pytest -q          # 151 tests, no network
 
-# ask a question about this repository
-uv run python -m aiden ask --verbose "what are the tool output budgets, and where are they defined?"
+# ask a question about this repository (inline TUI when stdout is a terminal)
+uv run python -m aiden ask "what are the tool output budgets, and where are they defined?"
+uv run python -m aiden ask --tui off "..."   # linear output, for pipes and screen readers
 
 # credentials: reuse what pi already has, or set env vars
 uv run aiden providers import pi
@@ -87,6 +89,7 @@ aiden/
   prompts.py     immutable versioned base prompt + content hash
   loop.py        turn state machine, tool dispatch, ceilings, wrap-up nudge
   tools/         read, grep, glob + path guard, budgets, spill
+  tui/           inline streaming renderer (theme, model, render, stream, writer, driver)
   providers/     L1 transport: IR, catalog, auth, 3 wire protocols (+ quirk layer)
   cli/           `aiden` command line (ask, providers, sessions)
 scripts/         catalog sync + live smoke tests

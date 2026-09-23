@@ -1,0 +1,250 @@
+"""The inline driver: event stream to terminal, with a live tail.
+
+Inline-first per research/06 §Decision: finalized content goes into the **real scrollback**, so
+native selection, tmux copy and Cmd-F keep working, and only the mutable tail lives in a
+repainted region.
+
+The invariant this module maintains:
+
+    cells[0 : _committed_cells]   are on screen in real scrollback, written exactly once
+    the open AssistantText cell   has its first `_assistant_lines_written` lines in scrollback
+    everything else               is the live region, repainted each frame
+
+Two rules make it work, and both were bugs first:
+
+- A cell with status ``RUNNING`` is never committed. Committing a tool cell when it starts means
+  its output and final status can never be shown.
+- Assistant text is committed *incrementally* (stable lines only, per the chunker) and the rest
+  stays live. Committing the whole cell when it closes would duplicate what was already written.
+
+Input is not handled here beyond interruption: this milestone streams a question asked on the
+command line. The keymap, editor and overlays attach at the same seam later.
+"""
+
+from __future__ import annotations
+
+import shutil
+import signal
+import sys
+from types import FrameType
+from typing import IO
+
+from ..events import (
+    Event,
+    RunFinished,
+    TextDelta,
+    ThinkingDelta,
+)
+from . import render
+from .model import ABORTED, RUNNING, AssistantText, Transcript
+from .stream import StreamController
+from .theme import Theme
+from .writer import LiveRegion, commit
+
+DEFAULT_WIDTH_FALLBACK = 100
+
+
+def terminal_width(stream: IO[str] | None = None) -> int:
+    try:
+        size = shutil.get_terminal_size(fallback=(DEFAULT_WIDTH_FALLBACK, 24))
+    except OSError:  # pragma: no cover - unusual stdio
+        return DEFAULT_WIDTH_FALLBACK
+    return max(20, size.columns)
+
+
+class TUIDriver:
+    """Renders a harness run inline, streaming into scrollback.
+
+    Implements the ``EventSink`` protocol, so ``run_loop`` never learns about the terminal.
+    """
+
+    def __init__(
+        self,
+        *,
+        out: IO[str] | None = None,
+        theme: Theme | None = None,
+        width: int | None = None,
+        show_thinking: bool = False,
+    ) -> None:
+        self.out = out or sys.stdout
+        self.theme = theme or Theme.from_env()
+        self.width = width or terminal_width(self.out)
+        self.show_thinking = show_thinking
+
+        self.transcript = Transcript()
+        self.stream = StreamController()
+        self.region = LiveRegion(width=self.width, sync=True)
+        self.aborted = False
+
+        self._committed_cells = 0
+        # cell id -> lines of that assistant cell already written to scrollback
+        self._assistant_lines: dict[int, int] = {}
+        self._frames = 0
+        self._bytes = 0
+
+    # ------------------------------------------------------------------ sink
+
+    def emit(self, event: Event) -> None:
+        if isinstance(event, TextDelta):
+            self.transcript.apply(event)
+            self.stream.push(event.text)
+            self._tick()
+            return
+
+        if isinstance(event, ThinkingDelta):
+            self.transcript.apply(event)
+            self._tick()
+            return
+
+        was_open = self.transcript.tail() is not None
+        self.transcript.apply(event)
+        # A tool call or turn boundary closes the prose, so the rest of that cell is final.
+        if was_open and self.transcript.tail() is None:
+            self.stream.take_rest()
+        self._tick()
+
+        if isinstance(event, RunFinished):
+            self.finish()
+
+    def abort(self) -> None:
+        """Mark the run aborted and keep whatever was produced.
+
+        research/06 §What great agent UIs do #10: an interrupt preserves work and never erases.
+        """
+        self.aborted = True
+        tail = self.transcript.tail()
+        if tail is not None:
+            tail.status = ABORTED
+        self.stream.take_rest()
+        self._tick()
+
+    def finish(self) -> None:
+        self.stream.take_rest()
+        self.transcript.finalize()
+        self._tick()
+        self._emit(self.region.plan([]))
+
+    # ------------------------------------------------------------------ rendering
+
+    def _tick(self) -> None:
+        self._commit_ready()
+        self._emit(self.region.plan(self._live_lines()))
+
+    def _commit_ready(self) -> None:
+        """Write everything that is final into real scrollback, exactly once."""
+        pending: list[str] = []
+
+        open_cell = self.transcript.tail()
+        if open_cell is not None:
+            released = self.stream.take_commit()
+            if released:
+                lines = render.plain_lines(released, self.width, self.theme)
+                self._assistant_lines[open_cell.id] = self._assistant_lines.get(
+                    open_cell.id, 0
+                ) + len(lines)
+                pending.extend(lines)
+
+        final_count = self._final_cell_count()
+        for cell in self.transcript.cells[self._committed_cells : final_count]:
+            pending.extend(self._final_lines(cell))
+        self._committed_cells = final_count
+
+        if not pending:
+            return
+        # Clear the live region first: committed lines push the screen, and an unerased tail
+        # would be left stranded above the new text.
+        self._emit(self.region.plan([]))
+        self._emit(commit(pending))
+        self.region.forget()
+
+    def _final_cell_count(self) -> int:
+        """Cells from the start that are final and therefore safe to commit."""
+        count = 0
+        open_cell = self.transcript.tail()
+        for cell in self.transcript.cells:
+            if cell is open_cell or cell.status == RUNNING:
+                break
+            count += 1
+        return count
+
+    def _final_lines(self, cell) -> list[str]:
+        """Lines for a now-final cell, skipping assistant text already written out."""
+        if isinstance(cell, AssistantText):
+            written = self._assistant_lines.get(cell.id, 0)
+            lines = render.plain_lines(cell.text, self.width, self.theme)
+            self._assistant_lines[cell.id] = len(lines)
+            return lines[written:]
+        return render.render_cell(cell, self.width, self.theme).lines
+
+    def _live_lines(self) -> list[str]:
+        """The mutable region: uncommitted cells plus the streaming remainder."""
+        lines: list[str] = []
+        open_cell = self.transcript.tail()
+
+        for cell in self.transcript.cells[self._committed_cells :]:
+            if cell is open_cell:
+                continue
+            rendered = render.render_cell(cell, self.width, self.theme).lines
+            if rendered:
+                if lines:
+                    lines.append("")
+                lines.extend(rendered)
+
+        if open_cell is not None:
+            written = self._assistant_lines.get(open_cell.id, 0)
+            all_lines = render.plain_lines(open_cell.text, self.width, self.theme)
+            remainder = all_lines[written:]
+            if remainder:
+                if lines:
+                    lines.append("")
+                lines.extend(remainder)
+
+        return lines
+
+    def _emit(self, payload: str) -> None:
+        if not payload:
+            return
+        self._frames += 1
+        self._bytes += len(payload)
+        self.out.write(payload)
+        self.out.flush()
+
+    # ------------------------------------------------------------------ lifecycle
+
+    def resize(self, width: int) -> None:
+        """A width change invalidates every wrapped line: full repaint is the sanctioned cost."""
+        if width == self.width:
+            return
+        self.width = width
+        self.region.resize(width)
+        self.region.forget()
+        # Committed scrollback cannot be re-wrapped; only the live region is repainted.
+        self._tick()
+
+    @property
+    def stats(self) -> dict[str, int]:
+        """Frame/byte counters, so the perf budget is measurable in tests."""
+        return {"frames": self._frames, "bytes": self._bytes, "width": self.width}
+
+
+class InterruptGuard:
+    """Turn SIGINT into a graceful abort instead of a traceback."""
+
+    def __init__(self, driver: TUIDriver) -> None:
+        self.driver = driver
+        self._previous: object | None = None
+
+    def __enter__(self) -> InterruptGuard:
+        try:
+            self._previous = signal.signal(signal.SIGINT, self._handle)
+        except ValueError:  # not the main thread (tests)
+            self._previous = None
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        if self._previous is not None:
+            signal.signal(signal.SIGINT, self._previous)  # type: ignore[arg-type]
+
+    def _handle(self, signum: int, frame: FrameType | None) -> None:
+        self.driver.abort()
+        raise KeyboardInterrupt

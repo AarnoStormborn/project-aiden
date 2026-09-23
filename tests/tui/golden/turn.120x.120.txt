@@ -1,0 +1,26 @@
+> What are the tool output budgets?
+
+[.] opencode-go/qwen3.8-flash · /repo/project-aiden
+
+( ) thinking · 11 tok (t to expand)
+
+I'll read the config.
+The budgets are:
+
+READ_MAX_BYTES is 16_384 and READ_MAX_LINES is 400.
+
+[ok] read(path=aiden/config.py) 1ms
+  READ_MAX_BYTES = 16_384
+
+── turn 2 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+── turn 3 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+[err] grep(pattern=TODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTOD...) 11ms
+  no matches for /TODO/ in .
+
+[!] output budget exhausted by reasoning
+
+  turns 3 · tools 2 · tok 1,800/120 · $0.0004
+  /home/u/.aiden/sessions/--repo-project-aiden--/20260101T000000-abcdef01.jsonl
+

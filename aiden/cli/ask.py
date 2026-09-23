@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from ..events import Diagnostic, TextDelta, ThinkingDelta
 from ..loop import run_loop
 from ..providers import ProviderError, ProviderSuite
 from ..session import SessionStore
+from ..tui.theme import no_colour
 
 C = {
     "dim": "\033[2m",
@@ -93,6 +95,38 @@ class ConsoleSink:
             print(paint(f"  ! {event.message}", colour), file=sys.stderr)
 
 
+def _wants_tui(args: argparse.Namespace) -> bool:
+    """TUI only when it can be seen: a terminal, colour-capable, and not machine-readable."""
+    if args.json or args.tui == "off":
+        return False
+    if args.tui == "on":
+        return True
+    if no_colour() or os.environ.get("AIDEN_TUI") == "plain":
+        return False
+    return sys.stdout.isatty()
+
+
+def _make_sink(args: argparse.Namespace):
+    """Pick the renderer. The loop is unaware of which one it got."""
+    if not _wants_tui(args):
+        return ConsoleSink(verbose=args.verbose, show_thinking=args.show_thinking), _NullGuard()
+
+    from ..tui.driver import InterruptGuard, TUIDriver
+
+    driver = TUIDriver(show_thinking=args.show_thinking)
+    return driver, InterruptGuard(driver)
+
+
+class _NullGuard:
+    """No-op context manager, so the call site needs no branching."""
+
+    def __enter__(self) -> None:
+        return None
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="aiden ask",
@@ -109,6 +143,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--show-thinking", action="store_true", help="print reasoning text")
     parser.add_argument("--no-session", action="store_true", help="do not write a session file")
     parser.add_argument("--json", action="store_true", help="machine-readable result on stdout")
+    parser.add_argument(
+        "--tui",
+        choices=["auto", "on", "off"],
+        default="auto",
+        help="inline TUI (auto = on when stdout is a terminal)",
+    )
     parser.add_argument("--system-prompt", type=Path, default=None, help="override the base prompt")
     return parser
 
@@ -136,24 +176,29 @@ async def _run(args: argparse.Namespace, question: str, cwd: Path) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    sink = ConsoleSink(verbose=args.verbose, show_thinking=args.show_thinking)
+    sink, interrupt = _make_sink(args)
     session = None if args.no_session else SessionStore.create(cwd=cwd, model=model.model.ref)
     system_prompt = args.system_prompt.read_text() if args.system_prompt else None
 
     try:
-        result = await run_loop(
-            question,
-            suite=suite,
-            model=model.model,
-            cwd=cwd,
-            sink=sink,
-            session=session,
-            max_turns=args.max_turns,
-            max_cost_usd=args.max_cost,
-            max_tokens=args.max_tokens,
-            thinking_level=model.thinking_level or args.thinking,
-            system_prompt=system_prompt,
-        )
+        with interrupt:
+            result = await run_loop(
+                question,
+                suite=suite,
+                model=model.model,
+                cwd=cwd,
+                sink=sink,
+                session=session,
+                max_turns=args.max_turns,
+                max_cost_usd=args.max_cost,
+                max_tokens=args.max_tokens,
+                thinking_level=model.thinking_level or args.thinking,
+                system_prompt=system_prompt,
+            )
+    except KeyboardInterrupt:
+        # The sink already committed partials and marked the cell aborted; report and stop.
+        print(paint("\ninterrupted", "yellow"), file=sys.stderr)
+        return 130
     except ProviderError as exc:
         print(f"\nerror: {exc}", file=sys.stderr)
         return 1

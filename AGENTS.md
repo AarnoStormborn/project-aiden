@@ -43,6 +43,10 @@ uv run python scripts/smoke_tools.py
 uv run python scripts/acceptance_v01.py
 ```
 
+The TUI is snapshot-tested: `AIDEN_UPDATE_GOLDEN=1 uv run python -m pytest tests/tui/` rewrites
+the frames in `tests/tui/golden/` at the three widths the spec mandates (80/94/120). Snapshot the
+layout before changing it, and treat a golden diff as a question, not an obstacle.
+
 Acceptance asserts **correctness only**. Efficiency is reported, not asserted: repeated runs of
 the same question varied between 11 and 17 tool calls, so a single-sample bound would be flaky.
 Efficiency gates need median-of-3 paired runs (`docs/research/05-benchmarks-evals.md`).
