@@ -21,6 +21,7 @@ from rich.markdown import Markdown
 from rich.syntax import Syntax
 
 from . import model
+from .caps import TerminalCaps, file_uri, hyperlink
 from .theme import Theme
 
 GUTTER = "  "  # LIVE_PREFIX_COLS = 2: every continuation line, and cell padding
@@ -39,8 +40,14 @@ class Rendered:
         return self.lines[self.stable :]
 
 
-def render_cell(cell: model.Cell, width: int, theme: Theme) -> Rendered:
+def render_cell(
+    cell: model.Cell,
+    width: int,
+    theme: Theme,
+    caps: TerminalCaps | None = None,
+) -> Rendered:
     """Render one cell at ``width``. Dispatches on cell type."""
+    caps = caps or TerminalCaps()
     if isinstance(cell, model.UserPrompt):
         return _user_prompt(cell, width, theme)
     if isinstance(cell, model.AssistantText):
@@ -48,7 +55,7 @@ def render_cell(cell: model.Cell, width: int, theme: Theme) -> Rendered:
     if isinstance(cell, model.Thinking):
         return _thinking(cell, width, theme)
     if isinstance(cell, model.ToolCall):
-        return _tool_call(cell, width, theme)
+        return _tool_call(cell, width, theme, caps)
     if isinstance(cell, model.Notice):
         return _notice(cell, width, theme)
     if isinstance(cell, model.TurnMarker):
@@ -128,7 +135,26 @@ def _thinking(cell: model.Thinking, width: int, theme: Theme) -> Rendered:
     return Rendered(lines, len(lines))
 
 
-def _tool_call(cell: model.ToolCall, width: int, theme: Theme) -> Rendered:
+def _link_paths(line: str, caps: TerminalCaps) -> str:
+    """Make a leading ``path`` or ``path:line:`` clickable, leaving the rest untouched.
+
+    Only a *leading* path is linked: grep output is ``path:line:text``, and linking arbitrary
+    text would both misfire and make golden frames unstable for the wrong reason.
+    """
+    if not caps.hyperlinks or not line:
+        return line
+    import re
+
+    match = re.match(r"^(?P<path>[\w./-]+\.\w+)(?::(?P<line>\d+))?:?", line)
+    if not match:
+        return line
+    path = match.group("path")
+    number = match.group("line")
+    target = file_uri(path, int(number) if number else None)
+    return hyperlink(match.group(0), target, caps) + line[match.end() :]
+
+
+def _tool_call(cell: model.ToolCall, width: int, theme: Theme, caps: TerminalCaps) -> Rendered:
     glyph = {
         model.OK: theme.glyphs.ok,
         model.ERROR: theme.glyphs.error,
@@ -154,6 +180,12 @@ def _tool_call(cell: model.ToolCall, width: int, theme: Theme) -> Rendered:
         model.ABORTED: "tool_err",
     }.get(cell.status, "tool_pending")
     header = f"{glyph} {cell.name}({args}){timing}{suffix}"
+    path_arg = next(
+        (v for k, v in cell.arguments.items() if k in {"path", "file"} and isinstance(v, str)),
+        "",
+    )
+    if path_arg:
+        header = header.replace(path_arg, hyperlink(path_arg, file_uri(path_arg), caps))
     lines = [paint(_fit(header, width, dot), status_token, theme)]
 
     if cell.output:

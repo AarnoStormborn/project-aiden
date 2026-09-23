@@ -174,6 +174,28 @@ One ordering bug was found here: replay emitted an assistant message's tool call
 text, so the prose landed after the tool cell and read as if the model only spoke once it had seen
 the result. Reconstruction now goes reasoning → prose → action.
 
+## Capability detection and hyperlinks (aiden/tui/caps.py)
+
+research/06 §What great agent UIs do #15 asks for capability detection *with user overrides*. The
+spec is explicit that probes must not delay first paint, so capabilities are resolved from the
+environment — free, and enough for the real cases — with an explicit override always winning.
+
+| Capability | Default | Override |
+|---|---|---|
+| OSC 8 hyperlinks | **off** unless the terminal is known to support them | `AIDEN_HYPERLINKS=on\|off` |
+| Synchronized output | on | `AIDEN_SYNC=0` |
+| 24-bit colour | auto (`COLORTERM`) | `AIDEN_TRUECOLOR=on\|off` |
+
+Hyperlinks default to off because the failure modes are asymmetric: a terminal that does not
+understand OSC 8 prints the URI as garbage in the middle of the user's output, while a missing link
+is merely plain text. When on, a *leading* `path` or `path:line:` in tool output becomes clickable,
+and the tool header links its `path` argument. Only a leading path is linked — linking arbitrary
+words would misfire and would make golden frames unstable for the wrong reason.
+
+`TerminalCaps` carries the pinned overrides on the value, so `describe()` reports how *these* caps
+were decided rather than re-reading `os.environ` and possibly disagreeing — the same inconsistency
+`Theme.from_env` had.
+
 ## Still not built
 
 - **Alt-screen overlays**: `review`, `transcript` pager, `sessions`, approval prompts. The
@@ -188,8 +210,9 @@ the result. Reconstruction now goes reasoning → prose → action.
   `/sessions` print inline rather than opening a scrollable alt-screen view with search.
 - **Approval prompts**: there is nothing to approve yet (no write tools), so the UI for it is
   designed but unimplemented.
-- **Mouse, Kitty keyboard protocol, OSC 8 hyperlinks**: capability probe and degradation. File
-  paths in tool output are plain text, not clickable.
+- **Mouse and the Kitty keyboard protocol**: OSC 8, synchronized output and truecolor are now
+  gated and overridable, but mouse reporting and the Kitty key protocol are not implemented, so
+  modified keys may be reported differently across terminals.
 - **`render.syntax_block` is still unused.** Markdown code fences *are* highlighted now (rich does
   it inside `markdown_block`, with `code_theme`), but standalone `syntax_block` is dead code: it
   was written for highlighting raw file contents in tool output, where the `read` tool's line

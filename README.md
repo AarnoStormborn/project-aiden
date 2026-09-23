@@ -90,6 +90,8 @@ overrides:
 | `AIDEN_ASCII` | unset | force ASCII glyphs |
 | `AIDEN_NO_COLOR` / `NO_COLOR` | unset | monochrome |
 | `AIDEN_SYNC` | on | set `0` if a terminal breaks on `CSI ?2026` |
+| `AIDEN_HYPERLINKS` | auto | `on`/`off` for OSC 8 links on paths |
+| `AIDEN_TRUECOLOR` | auto | `on`/`off` for 24-bit colour |
 | `AIDEN_ANIMATIONS` | auto | set `off` to disable spinners |
 | `AIDEN_KEYS_FILE` | `$AIDEN_HOME/keys.toml` | keymap overrides |
 

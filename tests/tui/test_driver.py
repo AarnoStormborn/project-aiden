@@ -292,3 +292,46 @@ def test_a_wall_of_text_stays_bounded_in_the_live_region(out: io.StringIO, theme
 
     assert len(driver._live_lines()) <= LIVE_LINE_CAP + 1
     assert "a line with no blank" in _committed_output(out)
+
+
+def test_driver_threads_capabilities_into_rendering(out: io.StringIO, theme: Theme):
+    """Regression: the caps parameter existed on render_cell but the driver never passed it.
+
+    So detection worked, the renderer supported links, and the feature was invisible — the same
+    shape of bug as the markdown and colour ones.
+    """
+    from aiden.tui.caps import TerminalCaps
+
+    def run(caps: TerminalCaps) -> str:
+        sink = io.StringIO()
+        driver = TUIDriver(out=sink, theme=theme, width=90)
+        driver.caps = caps
+        driver.emit(RunStarted(session_id="s", model="m", question="q", cwd="/repo"))
+        driver.emit(ToolCallStarted(call_id="c1", name="read", arguments={"path": "aiden/loop.py"}))
+        driver.emit(
+            ToolCallFinished(
+                call_id="c1",
+                name="read",
+                is_error=False,
+                duration_ms=1,
+                output_chars=20,
+                output="aiden/loop.py:85: x",
+            )
+        )
+        return sink.getvalue()
+
+    assert "\x1b]8;;" not in run(TerminalCaps(hyperlinks=False))
+    assert "\x1b]8;;file://" in run(TerminalCaps(hyperlinks=True))
+
+
+def test_driver_honours_the_sync_capability():
+    from aiden.tui.caps import TerminalCaps
+    from aiden.tui.writer import SYNC_START
+
+    sink = io.StringIO()
+    driver = TUIDriver(out=sink, theme=Theme(colour=True), width=80)
+    driver.caps = TerminalCaps(sync=False)
+    driver.region.sync = False
+    driver.emit(RunStarted(session_id="s", model="m", question="q", cwd="/repo"))
+    driver.emit(TextDelta(text="text"))
+    assert SYNC_START not in sink.getvalue()

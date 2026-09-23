@@ -37,6 +37,7 @@ from ..events import (
     ThinkingDelta,
 )
 from . import render
+from .caps import TerminalCaps
 from .model import ABORTED, RUNNING, AssistantText, Transcript
 from .stream import StreamController
 from .theme import Theme
@@ -74,7 +75,8 @@ class TUIDriver:
 
         self.transcript = Transcript()
         self.stream = StreamController()
-        self.region = LiveRegion(width=self.width, sync=True)
+        self.caps = TerminalCaps.detect()
+        self.region = LiveRegion(width=self.width, sync=self.caps.sync)
         self.aborted = False
 
         self._committed_cells = 0
@@ -207,7 +209,7 @@ class TUIDriver:
                 return []
             # The segment is closed, so the trailing partial block is now renderable as markdown.
             return render.markdown_block(remaining, self.width, self.theme)
-        return render.render_cell(cell, self.width, self.theme).lines
+        return render.render_cell(cell, self.width, self.theme, self.caps).lines
 
     def _live_lines(self) -> list[str]:
         """The mutable region: uncommitted cells plus the streaming remainder."""
@@ -217,7 +219,7 @@ class TUIDriver:
         for cell in self.transcript.cells[self._committed_cells :]:
             if cell is open_cell:
                 continue
-            rendered = render.render_cell(cell, self.width, self.theme).lines
+            rendered = render.render_cell(cell, self.width, self.theme, self.caps).lines
             if rendered:
                 if lines:
                     lines.append("")
