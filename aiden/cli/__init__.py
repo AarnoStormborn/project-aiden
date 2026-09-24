@@ -9,6 +9,7 @@ USAGE = """aiden <command> [args]
 commands:
   tui              interactive session in the terminal (needs a tty)
   ask "question"   ask one question and exit
+  eval             mine tasks from this repo, run them, and gate a harness change
   providers        inspect, authenticate and refresh the provider suite
   sessions         list recorded sessions for this project
   version          print the Aiden version
@@ -23,6 +24,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     command, rest = argv[0], argv[1:]
 
+    if command == "eval":
+        from .eval import main as eval_main
+
+        return eval_main(rest)
     if command == "providers":
         from .providers import main as providers_main
 

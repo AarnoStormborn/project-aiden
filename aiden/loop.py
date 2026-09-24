@@ -448,9 +448,7 @@ async def _gate_mutation(
         sensitive = decision.sensitive
     # Not every gated tool names a path. A shell is identified by its command and a fetch by its
     # URL; without those fallbacks the prompt asked "apply this change to ?".
-    target = path or str(
-        call.arguments.get("command") or call.arguments.get("url") or ""
-    )
+    target = path or str(call.arguments.get("command") or call.arguments.get("url") or "")
 
     reason_text = str(call.arguments.get("reason") or call.arguments.get("description") or "")
     sink.emit(
