@@ -43,9 +43,9 @@ def ctx(project: Path, tmp_path: Path) -> ToolContext:
 # --------------------------------------------------------------------------- registry
 
 
-def test_registry_exposes_the_expected_tools():
-    """Six of the seven the research specifies; web_fetch is the outstanding one."""
-    assert set(TOOLS) == {"read", "grep", "glob", "edit", "write", "bash"}
+def test_registry_exposes_the_full_surface():
+    """All seven the research specifies (research/02 §2)."""
+    assert set(TOOLS) == {"read", "grep", "glob", "edit", "write", "bash", "web_fetch"}
 
 
 def test_the_mutating_flag_matches_the_actual_tools():
@@ -53,6 +53,7 @@ def test_the_mutating_flag_matches_the_actual_tools():
     from aiden.tools import MUTATING_TOOLS
 
     assert MUTATING_TOOLS == {"edit", "write", "bash"}
+    # web_fetch changes nothing locally; it reaches outward, and the fetch policy governs it.
     for name, tool in TOOLS.items():
         assert getattr(tool, "mutating", None) is (name in MUTATING_TOOLS)
 
@@ -359,3 +360,28 @@ def test_grep_paths_stay_relative_when_the_search_root_is_a_file(ctx: ToolContex
     assert not result.is_error
     assert str(project) not in result.output
     assert result.output.lstrip().startswith("1 ") or "src/app.py:" in result.output
+
+
+def test_cap_text_respects_the_budget_for_one_enormous_line(ctx: ToolContext, project: Path):
+    """Regression: the "keep at least one line" fallback returned the whole line, defeating the cap.
+
+    A single very long line — minified JS, a one-line JSON blob — is exactly when the budget matters
+    most, and it is why this applies to every tool, not just web_fetch.
+    """
+    from aiden.tools.output import cap_text
+
+    capped = cap_text("x" * 100_000, max_bytes=1_000, max_lines=400)
+    assert capped.truncated
+    assert len(capped.text.encode()) <= 1_000
+    assert capped.hint, "a cut must leave a trace"
+
+
+def test_cap_text_still_keeps_what_fits():
+    """Within budget, the text is returned verbatim — including its trailing newline."""
+    from aiden.tools.output import cap_text
+
+    original = "short line\n" * 10
+    capped = cap_text(original, max_bytes=1_000, max_lines=400)
+    assert not capped.truncated
+    assert capped.text == original
+    assert capped.hint == ""

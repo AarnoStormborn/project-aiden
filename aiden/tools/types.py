@@ -78,6 +78,13 @@ class ToolContext:
     write_policy: Any = None
     #: Rules for what a shell command may do unattended.
     command_policy: Any = None
+    #: Rules for what may be fetched over the network.
+    fetch_policy: Any = None
+    #: Injected HTTP client, so tests never touch the network.
+    http_client: Any = None
+    #: URL -> extracted text, for this session only. Re-fetching a page the run already read is the
+    #: most expensive kind of waste a tool can commit.
+    fetch_cache: dict[str, str] = field(default_factory=dict)
 
     def policy(self) -> Any:
         if self.write_policy is None:
@@ -117,9 +124,11 @@ class Tool(Protocol):
 
 
 def preview_of(tool: Tool, args: dict[str, Any], ctx: ToolContext) -> str | None:
-    """The diff ``tool`` would produce for ``args``, or ``None`` when there is nothing to show."""
-    if not getattr(tool, "mutating", False):
-        return None
+    """What ``tool`` would do for ``args``, or ``None`` when there is nothing to show.
+
+    Deliberately *not* restricted to mutating tools: ``web_fetch`` changes nothing locally and still
+    needs the user to see the URL it is about to send.
+    """
     preview = getattr(tool, "preview", None)
     if preview is None:
         return None

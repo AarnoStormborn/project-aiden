@@ -91,6 +91,22 @@ Rules that must not be relaxed without updating `docs/plan/v0.2a-write-capabilit
 - **No in-process sandbox**, matching pi's stated reasoning: partial isolation gets mistaken for a
   boundary while still depending on the host shell and credentials.
 
+### Network access
+
+`web_fetch` changes nothing locally and still needs a gate, so the approval chain is keyed on
+**gated** tools rather than mutating ones (`aiden/tools/__init__.py:GATED_TOOLS`). Keying it on
+"mutating" meant a fetch would have run with no gate at all.
+
+- **Every fetch asks**, unless the host is in `AIDEN_FETCH_ALLOW`. A URL is opaque, so nothing about
+  it is provable — and prompt fatigue is the failure mode, which is what the allowlist is for.
+- **A query string can carry data out.** The prompt shows the URL in full for exactly that reason.
+- **The resolved address is checked, not just the hostname.** A name that resolves to `127.0.0.1`
+  defeats a string check; loopback, link-local, private, reserved, and the cloud metadata endpoint
+  are all refused *before* any request is made.
+- **Only text content types**, and reads stop at 2 MB with the stop reported.
+- **A session cache exists** because re-fetching a page the run already read is the most expensive
+  waste a tool can commit.
+
 ## Hard rules
 
 1. **Never commit credentials.** `~/.aiden/auth.json` (0600) holds them; `providers.toml` is

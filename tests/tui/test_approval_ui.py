@@ -208,9 +208,18 @@ def test_a_long_target_is_not_repeated_in_the_question():
     """The diff above already shows it; repeating a wrapped shell command makes the prompt unreadable."""
     from aiden.tui.approval_ui import _question
 
-    assert _question("aiden/loop.py") == "apply this change to aiden/loop.py? [y/N]"
-    assert _question("rm -rf build") == "apply this change to rm -rf build? [y/N]"
+    assert _question("edit", "aiden/loop.py") == "edit aiden/loop.py? [y/N]"
+    assert _question("bash", "rm -rf build") == "run rm -rf build? [y/N]"
+    assert _question("web_fetch", "https://example.com/x") == "fetch https://example.com/x? [y/N]"
 
     long_command = 'find build -maxdepth 2; echo "--- tracked files ---"; git ls-files build'
-    assert _question(long_command) == "apply this change? [y/N]"
-    assert _question("line one\nline two") == "apply this change? [y/N]"
+    assert _question("bash", long_command) == "run this? [y/N]"
+    assert _question("edit", "line one\nline two") == "edit this? [y/N]"
+
+
+def test_an_empty_target_still_asks_a_readable_question():
+    """Regression: the prompt read `apply this change to ?` when a tool named no path."""
+    from aiden.tui.approval_ui import _question
+
+    assert _question("web_fetch", "") == "fetch this? [y/N]"
+    assert _question("edit", "") == "edit this? [y/N]"

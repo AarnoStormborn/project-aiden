@@ -19,9 +19,11 @@ from .command_policy import CommandPolicy
 from .edit import EditTool
 from .glob import GlobTool
 from .grep import GrepTool
+from .net_policy import FetchPolicy
 from .policy import WritePolicy
 from .read import ReadTool
 from .types import ReadState, Tool, ToolContext, ToolResult, preview_of
+from .webfetch import WebFetchTool
 from .write import WriteTool
 
 #: Registered tools by name. Adding one is a single entry here plus a `spec()`.
@@ -32,12 +34,22 @@ _IMPLEMENTATIONS: tuple[Tool, ...] = (
     EditTool(),
     WriteTool(),
     BashTool(),
+    WebFetchTool(),
 )
 
 TOOLS: dict[str, Tool] = {tool.name: tool for tool in _IMPLEMENTATIONS}
 
-#: Tools that can change the working tree, and therefore need policy plus approval.
+#: Tools that can change the working tree. These take a checkpoint before running.
 MUTATING_TOOLS = frozenset(name for name, tool in TOOLS.items() if getattr(tool, "mutating", False))
+
+#: Tools that go through the approval gate. Wider than the mutating set on purpose: a fetch changes
+#: nothing locally and still sends a request outward, which the user should see. Keying the gate on
+#: "mutating" meant `web_fetch` would have run with no gate at all.
+GATED_TOOLS = frozenset(
+    name
+    for name, tool in TOOLS.items()
+    if getattr(tool, "mutating", False) or hasattr(tool, "approval_required")
+)
 
 
 def tool_specs() -> list[ToolSpec]:
@@ -70,11 +82,13 @@ def execute(name: str, arguments: Any, ctx: ToolContext) -> ToolResult:
 
 
 __all__ = [
+    "GATED_TOOLS",
     "MUTATING_TOOLS",
     "TOOLS",
     "BashTool",
     "CommandPolicy",
     "EditTool",
+    "FetchPolicy",
     "GlobTool",
     "GrepTool",
     "ReadState",
@@ -82,6 +96,7 @@ __all__ = [
     "Tool",
     "ToolContext",
     "ToolResult",
+    "WebFetchTool",
     "WritePolicy",
     "WriteTool",
     "execute",

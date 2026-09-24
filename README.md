@@ -23,8 +23,9 @@ mainstream harnesses do not:
 | **TUI — interactive session + keymap** | **done — `aiden tui`, `/` commands, configurable chords** |
 | **TUI — markdown rendering, session replay, resume** | **done — `--render`, `--resume <id>`** |
 | **Write capability — edit/write, guards, checkpoints, approval** | **done — `docs/plan/v0.2a-write-capability.md`** |
-| **`bash` with a command policy** | **done — 6 of 7 tools; `docs/plan/v0.2b-bash.md`** |
-| `web_fetch`, compaction, the learning subsystem | next |
+| **`bash` with a command policy** | **done — `docs/plan/v0.2b-bash.md`** |
+| **`web_fetch` — extraction, SSRF refusal, approval** | **done — all 7 tools; `docs/plan/v0.2c-webfetch.md`** |
+| Eval runner, compaction, the learning subsystem | next |
 
 ## Quick start
 
@@ -100,6 +101,7 @@ overrides:
 | `AIDEN_ALLOW_WRITES` | unset | non-interactive runs write without asking (off by default) |
 | `AIDEN_CHECKPOINT_DIR` | `$AIDEN_HOME/checkpoints` | pre-image snapshots for undo |
 | `AIDEN_CHECKPOINT_KEEP` | `20` | turns of undo history kept per session |
+| `AIDEN_FETCH_ALLOW` | unset | hosts fetched without approval, e.g. `docs.python.org,github.com` |
 
 Sessions live in `~/.aiden/sessions/--<project-path>--/` — deliberately outside the repo so
 transcripts can never be committed. `providers.toml` is gitignored because it can hold keys.
@@ -114,7 +116,9 @@ aiden/
   session.py     append-only JSONL entry tree (the transcript is the product)
   prompts.py     immutable versioned base prompt + content hash
   loop.py        turn state machine, tool dispatch, ceilings, wrap-up nudge
-  tools/         read, grep, glob, edit, write, bash + path/command policy, budgets, spill
+  tools/         read, grep, glob, edit, write, bash, web_fetch
+                 + write/command/fetch policies, budgets, spill
+  htmltext.py    HTML to readable text (content scoring, no dependency)
   approval.py    who may decide a change; deny-by-default when nobody can be asked
   checkpoint.py  pre-image snapshots, so /undo is a lookup
   diffutil.py    diff computation (used by the approval prompt and the transcript)

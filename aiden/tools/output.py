@@ -64,7 +64,12 @@ def cap_text(
             kept_lines.append(line)
             used += size
 
-    kept_lines = kept_lines or lines[:1]
+    if not kept_lines:
+        # Nothing fitted. Returning the whole first line would blow the budget — a single very long
+        # line (minified JS, a one-line JSON blob) is exactly when the cap matters most — so cut it
+        # to the budget and mark the cut.
+        first = lines[0] if lines else ""
+        kept_lines = [first.encode("utf-8")[:max_bytes].decode("utf-8", "ignore")]
     next_offset = offset + len(kept_lines)
     hint = (
         f"[truncated: {cut_reason}. Showing lines {offset + 1}-{next_offset} of "

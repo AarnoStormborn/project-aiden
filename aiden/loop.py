@@ -50,6 +50,7 @@ from .session import (
     SessionStore,
 )
 from .tools import (
+    GATED_TOOLS,
     MUTATING_TOOLS,
     TOOLS,
     ToolContext,
@@ -421,7 +422,7 @@ async def _gate_mutation(
     preview means the tool is about to refuse anyway (bad path, missing match, stale read), so there
     is nothing to ask a human about — the tool's own error result is the right answer.
     """
-    if call.name not in MUTATING_TOOLS:
+    if call.name not in GATED_TOOLS:
         return None
 
     tool = TOOLS[call.name]
@@ -445,8 +446,11 @@ async def _gate_mutation(
         if not decision.allowed:
             return ToolResult.error(decision.reason)
         sensitive = decision.sensitive
-    # A shell has no path, so the command is what the prompt identifies.
-    target = path or str(call.arguments.get("command", ""))
+    # Not every gated tool names a path. A shell is identified by its command and a fetch by its
+    # URL; without those fallbacks the prompt asked "apply this change to ?".
+    target = path or str(
+        call.arguments.get("command") or call.arguments.get("url") or ""
+    )
 
     reason_text = str(call.arguments.get("reason") or call.arguments.get("description") or "")
     sink.emit(
