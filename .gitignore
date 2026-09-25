@@ -22,6 +22,10 @@ htmlcov/
 providers.toml
 *.pem
 
+# Eval run outputs are per-machine (they embed local paths and spend money); the mined task
+# definitions are committed because they are derived from a commit and reproducible.
+eval/runs/
+
 # Aiden runtime state (sessions, spill files, harness ledger, eval runs).
 # Sessions live in ~/.aiden/ by default; a repo-local override must stay untracked.
 .aiden/

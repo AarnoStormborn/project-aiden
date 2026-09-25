@@ -508,3 +508,103 @@ def test_an_identical_run_passes_the_gate():
     decision = gate(report_with(*results), report_with(*results))
     assert decision.passed, decision.reasons
     assert isinstance(decision, GateDecision)
+
+
+# ------------------------------------------------- nesting and cleanup (regressions)
+
+
+def test_a_nested_sandbox_is_refused(repo: Path, monkeypatch):
+    """Regression: validation ran the eval suite, which mined again — unbounded recursion.
+
+    One `mine()` call created 3,523 worktrees and took 39 minutes before this guard existed.
+    """
+    from aiden.eval.sandbox import NESTED_ENV, SandboxError
+
+    monkeypatch.setenv(NESTED_ENV, "1")
+    with pytest.raises(SandboxError) as exc:
+        Sandbox(repo).create()
+    assert "inside a sandbox" in str(exc.value)
+
+
+def test_a_sandbox_can_opt_into_nesting_for_a_deliberate_case(repo: Path, tmp_path: Path):
+    from aiden.eval.sandbox import NESTED_ENV
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv(NESTED_ENV, "1")
+        box = Sandbox(repo, root=tmp_path / "wt", allow_nested=True)
+        box.create()
+        try:
+            assert box.path.is_dir()
+        finally:
+            box.remove()
+
+
+def test_child_processes_are_marked(repo: Path):
+    """The guard only works if the marker reaches the tests being graded."""
+    with Sandbox(repo) as box:
+        result = box.run(
+            [box.python(), "-c", "import os; print(os.environ.get('AIDEN_EVAL_ACTIVE'))"]
+        )
+        assert result.stdout.strip() == "1"
+
+
+def test_a_sandbox_leaves_nothing_registered(repo: Path, tmp_path: Path):
+    """Regression: nothing checked cleanup, so thousands of worktrees leaked."""
+    import subprocess
+
+    def registered() -> set[str]:
+        proc = subprocess.run(
+            ["git", "worktree", "list", "--porcelain"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return {
+            line.removeprefix("worktree ")
+            for line in proc.stdout.splitlines()
+            if line.startswith("worktree ")
+        }
+
+    before = registered()
+    with Sandbox(repo, root=tmp_path / "wt") as box:
+        path = box.path
+        assert str(path) in registered(), "the worktree should be registered while in use"
+    after = registered()
+
+    assert after == before, f"leaked: {after - before}"
+    assert not path.exists(), "the directory should be gone too"
+
+
+def test_mining_never_uses_the_eval_suite_as_its_own_oracle(repo: Path):
+    """A task graded by the eval suite means running an eval inside an eval."""
+    tasks, rejections = mine(repo, limit=6, per_module=1)
+    for task in tasks:
+        for node in task.fail_to_pass:
+            assert "test_eval" not in node, f"{task.id} is graded by the eval suite itself"
+    assert any("eval suite's own" in r.reason for r in rejections), (
+        "candidates referenced only by the eval suite should be rejected with that reason"
+    )
+
+
+def test_mining_is_not_quadratic(repo: Path):
+    """Regression: leaked worktrees made every git operation slower, quadrupling runtime.
+
+    Asserted as a worktree count rather than a duration, because a timing assertion would be flaky
+    and the count is the actual defect.
+    """
+    import subprocess
+
+    def count() -> int:
+        proc = subprocess.run(
+            ["git", "worktree", "list"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return len(proc.stdout.splitlines())
+
+    before = count()
+    mine(repo, limit=2, per_module=1)
+    assert count() == before, "mining must not leave worktrees behind"

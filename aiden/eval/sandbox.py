@@ -15,6 +15,7 @@ repository — a run that crashed mid-validation would otherwise leave the user'
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -22,6 +23,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 WORKTREE_TIMEOUT_S = 120
+
+#: Set for every process the sandbox starts. A sandbox nested inside a sandbox means the tests being
+#: graded are themselves running an eval, which is how a single `mine()` call once created 3,500
+#: worktrees and took 39 minutes: validation ran `tests/test_eval.py`, which called `mine()`, which
+#: validated by running `tests/test_eval.py` again.
+NESTED_ENV = "AIDEN_EVAL_ACTIVE"
 
 
 @dataclass(slots=True)
@@ -43,11 +50,20 @@ class SandboxError(RuntimeError):
 class Sandbox:
     """A git worktree at a fixed commit, removed when the context exits."""
 
-    def __init__(self, repo: Path, *, base_commit: str = "HEAD", root: Path | None = None) -> None:
+    def __init__(
+        self,
+        repo: Path,
+        *,
+        base_commit: str = "HEAD",
+        root: Path | None = None,
+        allow_nested: bool = False,
+    ) -> None:
         self.repo = repo.resolve()
         self.base_commit = base_commit
         self._root = Path(root or Path(tempfile.gettempdir()) / "aiden-eval-worktrees")
         self._path: Path | None = None
+        #: Only a test that knows it is grading a sandbox-creating test should set this.
+        self.allow_nested = allow_nested
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -61,6 +77,12 @@ class Sandbox:
     def create(self) -> Path:
         if self._path is not None:
             return self._path
+        if os.environ.get(NESTED_ENV) and not self.allow_nested:
+            raise SandboxError(
+                "refused to create a sandbox inside a sandbox. The code under test is itself "
+                "running an eval, so its tests would recurse without bound. If a task genuinely "
+                "needs to grade a test that creates sandboxes, pass allow_nested=True."
+            )
         if not (self.repo / ".git").exists():
             raise SandboxError(
                 f"{self.repo} is not a git repository; eval tasks need one so the patch is "
@@ -158,6 +180,8 @@ class Sandbox:
         to the worktree puts its copy of the package ahead of the editable install, so the code under
         test is the worktree's.
         """
+        env = dict(os.environ)
+        env[NESTED_ENV] = "1"
         try:
             proc = subprocess.run(  # noqa: S603 - argv list, no shell
                 command,
@@ -166,6 +190,7 @@ class Sandbox:
                 text=True,
                 timeout=timeout,
                 check=False,
+                env=env,
             )
         except subprocess.TimeoutExpired:
             return CommandResult(False, "", f"timed out after {timeout}s", -1)

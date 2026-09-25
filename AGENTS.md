@@ -107,6 +107,24 @@ Rules that must not be relaxed without updating `docs/plan/v0.2a-write-capabilit
 - **A session cache exists** because re-fetching a page the run already read is the most expensive
   waste a tool can commit.
 
+## Evaluation
+
+`aiden eval` mines tasks from this repo, runs the agent against them in disposable git worktrees, and
+gates a harness change. The rules that make its numbers mean anything:
+
+- **A task is only adopted when it discriminates** — the tests must fail without the code and pass with
+  it. Roughly 6 candidates in 46 survive this, and the rejections are the feature.
+- **`resolved` needs both directions**: every fail-to-pass passes *and* every pass-to-pass still
+  passes. A patch that fixes the target and breaks a neighbour is not a fix.
+- **Infrastructure failures are not model failures.** A run that could not be set up is excluded from
+  the denominator, so a broken runner cannot look like a weak model.
+- **`< 3 pp` is noise**, and the gate checks cost as well as resolved rate. A harness that resolves
+  more by spending ten times as much has not improved.
+- **The set size is printed next to every rate.** Six tasks is an indication, not a result, and the
+  report says so.
+- **Eval sessions are written to `~/.aiden/eval-sessions/`**, not the user's session directory, so a
+  benchmark does not fill their history with throwaway worktrees.
+
 ## Hard rules
 
 1. **Never commit credentials.** `~/.aiden/auth.json` (0600) holds them; `providers.toml` is

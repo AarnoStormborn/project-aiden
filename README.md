@@ -25,7 +25,8 @@ mainstream harnesses do not:
 | **Write capability — edit/write, guards, checkpoints, approval** | **done — `docs/plan/v0.2a-write-capability.md`** |
 | **`bash` with a command policy** | **done — `docs/plan/v0.2b-bash.md`** |
 | **`web_fetch` — extraction, SSRF refusal, approval** | **done — all 7 tools; `docs/plan/v0.2c-webfetch.md`** |
-| Eval runner, compaction, the learning subsystem | next |
+| **Eval runner — mined tasks, oracle, seeded reports, change gate** | **done — `docs/plan/v0.3-eval-runner.md`** |
+| Compaction, steering, the learning subsystem | next |
 
 ## Quick start
 
@@ -47,6 +48,11 @@ uv run aiden providers import pi
 # provider catalogue
 uv run aiden providers list
 uv run aiden providers show opencode-go
+
+# evaluation: mine tasks from this repo, run the agent against them, gate a change
+uv run python -m aiden eval mine --limit 6
+uv run python -m aiden eval run --seeds 3 --label "candidate"
+uv run python -m aiden eval gate --baseline eval/runs/baseline.json --candidate eval/runs/latest.json
 
 # what did past runs do?
 uv run python -m aiden sessions list
@@ -119,6 +125,7 @@ aiden/
   tools/         read, grep, glob, edit, write, bash, web_fetch
                  + write/command/fetch policies, budgets, spill
   htmltext.py    HTML to readable text (content scoring, no dependency)
+  eval/          task mining, sandboxed runs, oracle, seeded reports, change gate
   approval.py    who may decide a change; deny-by-default when nobody can be asked
   checkpoint.py  pre-image snapshots, so /undo is a lookup
   diffutil.py    diff computation (used by the approval prompt and the transcript)

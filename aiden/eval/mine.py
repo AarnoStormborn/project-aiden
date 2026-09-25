@@ -34,6 +34,11 @@ MIN_BODY_LINES = 2
 #: Per-command timeout during mining. A task whose tests take minutes is not usable in a loop.
 MINING_TIMEOUT_S = 120
 
+#: Test files that must never serve as an oracle. The eval suite creates sandboxes, so grading it
+#: means running an eval inside an eval — self-referential, and the source of a runaway recursion
+#: before the sandbox gained its nesting guard.
+SELF_REFERENTIAL_TESTS = ("test_eval.py",)
+
 #: A candidate whose tests all depend on one symbol is really "rewrite this module". Blanking
 #: `run_loop` breaks 42 tests, which measures a rewrite rather than a fix and gives a resolved rate
 #: that says nothing about anything else. Focused tasks are the ones worth having.
@@ -214,11 +219,20 @@ def mine(
             for candidate in candidate_functions(original):
                 if len(tasks) >= limit or taken >= per_module:
                     break
+                first = f"{module.stem}--{candidate.symbol}"
                 tests = referencing_tests(tests_dir, candidate.symbol)
                 if not tests:
                     continue
+                if any(path.name in SELF_REFERENTIAL_TESTS for path in tests):
+                    rejections.append(
+                        Rejection(
+                            first,
+                            "the only tests that reference it are the eval suite's own, which would "
+                            "mean grading an eval with an eval",
+                        )
+                    )
+                    continue
 
-                first = f"{module.stem}--{candidate.symbol}"
                 broken = blank_body(original, candidate.symbol)
                 if broken is None:
                     rejections.append(Rejection(first, "the body could not be rewritten"))
