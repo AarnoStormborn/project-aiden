@@ -175,9 +175,29 @@ class Sandbox:
         edit + commit gave 0 lines, the identical edit without a commit gave 2, and a live run
         reported `resolved` with a patch of 0 — a real fix scored as no change at all.
         """
-        self._git("add", "-A")
+        added = self._git("add", "-A")
         result = self._git("diff", "--cached", "--no-color", *self._diff_base())
-        return result.stdout
+        patch = result.stdout
+        # A git command that could not run at all means the sandbox is gone or unreadable — the patch
+        # is unknowable, and an empty patch would silently score a real fix as no change. A live run
+        # hit exactly this: the graded agent's own test suite cleaned up the *shared* temp root and
+        # deleted the running sandbox, so every git call returned `Errno 2` while the report said 0.
+        if not added.ok or not result.ok:
+            raise SandboxError(
+                f"git could not compute the patch in {self.path}: "
+                f"add={'ok' if added.ok else added.stderr.strip()[:200]!r} "
+                f"diff={'ok' if result.ok else result.stderr.strip()[:200]!r}"
+            )
+        status = self._git("status", "--porcelain")
+        # A patch that is empty while the worktree is dirty means the index is not tracking the
+        # worktree. Loud beats wrong: reporting nothing would score a real change as zero.
+        if not patch.strip() and status.ok and status.stdout.strip():
+            raise SandboxError(
+                "the worktree differs from the task's start but the patch is empty, which means the "
+                "index is not tracking the worktree. Refusing to report a patch of nothing rather "
+                f"than scoring a real change as zero. git status:\n{status.stdout.strip()[:400]}"
+            )
+        return patch
 
     def changed_files(self) -> list[str]:
         result = self._git("diff", "--cached", "--name-only", *self._diff_base())

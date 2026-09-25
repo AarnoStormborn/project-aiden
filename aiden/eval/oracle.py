@@ -11,6 +11,7 @@ as one would reward exactly the wrong behaviour.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from .sandbox import Sandbox
@@ -18,6 +19,12 @@ from .task import Task
 
 #: Generous: a task's tests are small, but the agent may have left the repo slow to collect.
 ORACLE_TIMEOUT_S = 300
+
+#: pytest's terminal summary, e.g. "12 passed" or "1 failed, 3 passed". Its absence means pytest never
+#: reported results — which must never be scored as a pass. Without this check, a run in a deleted
+#: directory produced no output, `failed` stayed empty, and every fail-to-pass test was counted as
+#: having passed: a run that never executed scored a perfect result.
+_SUMMARY = re.compile(r"\d+ (passed|failed|error|skipped|xfailed|xpassed)", re.IGNORECASE)
 
 
 @dataclass(slots=True)
@@ -54,6 +61,13 @@ def grade(box: Sandbox, task: Task) -> Verdict:
     output = f"{result.stdout}{result.stderr}"
     if result.returncode == -1 and "timed out" in output:
         return Verdict(error=output.strip())
+    if not _SUMMARY.search(output):
+        return Verdict(
+            error=(
+                "the test run produced no pytest summary, so nothing can be concluded from it. "
+                f"returncode={result.returncode}, output={output.strip()[:300]!r}"
+            )
+        )
 
     from .mine import failing_tests_from_output
 
@@ -69,7 +83,6 @@ def grade(box: Sandbox, task: Task) -> Verdict:
     if not verdict.f2p_passed and not verdict.f2p_failed and not result.ok:
         verdict.error = "the tests did not run (collection error or missing file)"
         return verdict
-
     verdict.resolved = not verdict.f2p_failed and not verdict.p2p_failed
     return verdict
 

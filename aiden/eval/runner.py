@@ -115,8 +115,14 @@ async def run_task(
     repo = (repo or Path.cwd()).resolve()
     results: list[TaskResult] = []
 
+    # The run owns a private root. This is not tidiness: a graded agent runs this repository's own
+    # test suite inside its worktree, those tests call `run_task`, and every `run_task` cleans up in a
+    # `finally`. With a shared root, a nested cleanup deleted the *running* sandbox — the patch then
+    # read as empty and grading degenerated, because every git call in a deleted directory fails.
+    owns_root = worktree_root is None
+    root = worktree_root or Path(tempfile.mkdtemp(prefix="aiden-eval-run-"))
     try:
-        with Sandbox(repo, base_commit=task.base_commit or "HEAD", root=worktree_root) as box:
+        with Sandbox(repo, base_commit=task.base_commit or "HEAD", root=root) as box:
             for seed in range(1, max(1, options.seeds) + 1):
                 result = await _run_seed(task, seed, box, agent, options)
                 results.append(result)
@@ -131,31 +137,30 @@ async def run_task(
                         f"{result.turns} turns"
                     )
     finally:
-        leaked = prune_worktrees(repo, worktree_root)
+        leaked = prune_worktrees(repo, root)
         if leaked and options.on_event:
             # Never silent: a leak is the difference between a 3-minute suite and an 8.5-hour one.
             options.on_event(f"  pruned {leaked} leaked worktree(s)")
+        if owns_root:
+            shutil.rmtree(root, ignore_errors=True)
     return results
 
 
 def prune_worktrees(repo: Path, root: Path | None) -> int:
-    """Remove every sandbox directory this run could have produced. Returns the count pruned.
+    """Remove sandboxes under ``root`` and detach their registrations. Returns the count removed.
 
-    Sweeps the *default* root as well as the per-run one, because a sandbox created by code running
-    inside a sandbox defaults to the shared root — which is where every leak has landed.
+    Only the given root is touched. An earlier version also swept the shared temp root, which turned
+    out to be destructive: a graded agent runs this repository's tests, those tests call `run_task`,
+    and the nested cleanup therefore deleted the *live* sandbox of the run that was grading it. The
+    patch then read as empty and grading degenerate, because every git call in a deleted directory
+    fails. Scoping the sweep to the caller's own root makes a nested run unable to reach outward.
 
-    This is a bound, not a fix. Two guards aim to stop the creation in the first place (the nesting
-    marker and the task-snapshot check), and neither has proven sufficient, so the cleanup is
-    unconditional and reports what it removed. It matters because a leaked *registration* makes every
-    later git operation slower: 3,523 accumulated worktrees once took the suite from 3 minutes to 8.5
-    hours.
+    Locked registrations are unlocked first: `git worktree prune` never removes a locked entry, so a
+    deleted directory could stay registered forever and the stray count only ever grew.
     """
     removed = 0
-    candidates = [root, Path(tempfile.gettempdir()) / "aiden-eval-worktrees"]
-    for candidate in candidates:
-        if candidate is None or not candidate.exists():
-            continue
-        for directory in candidate.iterdir():
+    if root is not None and root.exists():
+        for directory in root.iterdir():
             if not directory.is_dir():
                 continue
             try:

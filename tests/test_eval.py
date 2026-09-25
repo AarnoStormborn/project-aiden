@@ -23,7 +23,7 @@ from aiden.eval.mine import (
 from aiden.eval.oracle import baseline_check, grade
 from aiden.eval.report import GateDecision, RunReport, TaskResult, gate
 from aiden.eval.runner import RunOptions, run_task
-from aiden.eval.sandbox import Sandbox
+from aiden.eval.sandbox import CommandResult, Sandbox
 from aiden.eval.task import Task, load_tasks
 from aiden.loop import LoopResult
 from aiden.providers.types import Usage
@@ -726,3 +726,56 @@ def test_the_patch_is_visible_even_when_the_agent_commits(repo: Path, simple_tas
         assert box.changed_files() == [relative]
 
     assert target.read_text() == original, "the real repository must never be touched"
+
+
+class _DeadSandbox:
+    """A sandbox whose directory is gone: every command fails with ENOENT."""
+
+    def python(self) -> str:
+        return "python"
+
+    def run(self, _command: list[str], *, timeout: int) -> CommandResult:
+        return CommandResult(False, "", "[Errno 2] No such file or directory", -1)
+
+
+def test_a_run_that_never_ran_is_not_a_pass(simple_task: Task):
+    """Regression: grading counted unparsed output as every test passing.
+
+    `f2p_passed` was computed as "not in the parsed failures", so when pytest produced no output at
+    all every fail-to-pass test counted as passed and the run scored a perfect result. A live run did
+    this while its own sandbox had been deleted underneath it.
+    """
+    verdict = grade(_DeadSandbox(), simple_task)  # type: ignore[arg-type]
+    assert verdict.resolved is False, "a run that never executed must not score as resolved"
+    assert "no pytest summary" in verdict.error
+
+
+def test_a_real_pytest_summary_is_accepted(simple_task: Task):
+    """The guard must not reject a genuine run — otherwise it trades a false pass for a false fail."""
+    summary = f"{len(simple_task.fail_to_pass)} passed in 0.42s"
+
+    class _PassingBox:
+        def python(self) -> str:
+            return "python"
+
+        def run(self, _command: list[str], *, timeout: int) -> CommandResult:
+            return CommandResult(True, summary, "", 0)
+
+    verdict = grade(_PassingBox(), simple_task)  # type: ignore[arg-type]
+    assert verdict.resolved is True
+
+
+def test_cleanup_cannot_reach_outside_its_own_root(repo: Path, simple_task: Task, tmp_path: Path):
+    """Regression: a nested cleanup deleted the live sandbox of the run grading it.
+
+    A graded agent runs this repo's tests, those tests call `run_task`, and the old cleanup swept the
+    shared temp root — killing the running sandbox and making the patch read as empty.
+    """
+    from aiden.eval.runner import prune_worktrees
+
+    live_root = tmp_path / "live"
+    with Sandbox(repo, base_commit=simple_task.base_commit, root=live_root) as box:
+        assert box.path.exists()
+        # A nested run cleaning up its own, unrelated root.
+        prune_worktrees(repo, tmp_path / "other-root")
+        assert box.path.exists(), "a nested cleanup must not delete a live sandbox"
