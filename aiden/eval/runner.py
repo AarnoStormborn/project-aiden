@@ -169,7 +169,7 @@ def prune_worktrees(repo: Path, root: Path | None) -> int:
                 continue
     with contextlib.suppress(OSError, subprocess.TimeoutExpired):
         subprocess.run(
-            ["git", "worktree", "prune"],
+            ["git", "worktree", "prune"],  # noqa: S607 - the user's git, via PATH
             cwd=str(repo),
             capture_output=True,
             text=True,
