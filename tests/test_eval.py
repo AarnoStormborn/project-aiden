@@ -686,3 +686,43 @@ def test_mining_refuses_a_base_commit_without_the_nesting_guard(repo: Path):
     """Regression: mining from 1e5ef231 created 169 sandboxes and timed out at 240 s when graded."""
     with pytest.raises(ValueError, match="predates the sandbox nesting guard"):
         mine(repo, base_commit=UNGUARDED_BASE, limit=1)
+
+
+def test_the_patch_is_visible_even_when_the_agent_commits(repo: Path, simple_task: Task, tmp_path):
+    """Regression: `git diff --cached` compares against HEAD, and the agent can move HEAD.
+
+    An agent that commits its own fix made a real change read as an empty patch — a live run reported
+    `resolved` with `patch_lines=0`. The diff is now taken against the recorded snapshot commit.
+    """
+    # `files` is path -> content, the task's starting state.
+    (relative, _content), *_rest = simple_task.files.items()
+    target = repo / relative
+    original = target.read_text()
+
+    with Sandbox(repo, base_commit=simple_task.base_commit, root=tmp_path / "wt") as box:
+        box.reset()
+        box.apply(simple_task.files)
+        box.snapshot("task start")
+
+        edited = box.path / relative
+        edited.write_text(edited.read_text() + "\n# agent was here\n")
+
+        assert box.diff_lines() > 0, "an uncommitted edit must show up"
+        assert box.changed_files() == [relative]
+
+        box._git("add", "-A")
+        box._git(
+            "-c",
+            "user.name=agent",
+            "-c",
+            "user.email=agent@localhost",
+            "commit",
+            "--no-verify",
+            "-m",
+            "the agent commits its own work",
+        )
+
+        assert box.diff_lines() > 0, "a committed fix must still show up in the patch"
+        assert box.changed_files() == [relative]
+
+    assert target.read_text() == original, "the real repository must never be touched"

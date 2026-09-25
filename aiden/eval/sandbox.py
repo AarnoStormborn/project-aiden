@@ -62,6 +62,9 @@ class Sandbox:
         self.base_commit = base_commit
         self._root = Path(root or Path(tempfile.gettempdir()) / "aiden-eval-worktrees")
         self._path: Path | None = None
+        #: The commit recorded by ``snapshot()``. Diffs are taken against this, never `HEAD`, because
+        #: `HEAD` moves when the agent commits its own work.
+        self._snapshot_sha: str | None = None
         #: Only a test that knows it is grading a sandbox-creating test should set this.
         self.allow_nested = allow_nested
 
@@ -138,20 +141,22 @@ class Sandbox:
         as part of the agent's answer, inflating every patch-size number and making a no-op agent look
         like it had done something.
         """
-        if not self._git("status", "--porcelain").stdout.strip():
-            return  # nothing to record
-        self._git("add", "-A")
-        self._git(
-            "-c",
-            "user.name=aiden-eval",
-            "-c",
-            "user.email=eval@localhost",
-            "commit",
-            "--no-verify",
-            "--allow-empty",
-            "-m",
-            message,
-        )
+        if self._git("status", "--porcelain").stdout.strip():
+            self._git("add", "-A")
+            self._git(
+                "-c",
+                "user.name=aiden-eval",
+                "-c",
+                "user.email=eval@localhost",
+                "commit",
+                "--no-verify",
+                "--allow-empty",
+                "-m",
+                message,
+            )
+        # Recorded even when there was nothing to commit, so the diff base is always the task start
+        # rather than whatever the agent left behind.
+        self._snapshot_sha = self._git("rev-parse", "HEAD").stdout.strip() or None
 
     def reset(self) -> None:
         """Discard everything the agent did, keeping the task's starting files.
@@ -163,14 +168,24 @@ class Sandbox:
         self._git("clean", "-fd")
 
     def diff(self) -> str:
-        """The patch the agent produced, including new files."""
+        """The patch the agent produced, including new files.
+
+        Diffed against the snapshot commit, not `HEAD`: an agent that commits its own fix moves `HEAD`
+        onto that fix, and `git diff --cached` then reports an empty patch. Measured before the fix:
+        edit + commit gave 0 lines, the identical edit without a commit gave 2, and a live run
+        reported `resolved` with a patch of 0 — a real fix scored as no change at all.
+        """
         self._git("add", "-A")
-        result = self._git("diff", "--cached", "--no-color")
+        result = self._git("diff", "--cached", "--no-color", *self._diff_base())
         return result.stdout
 
     def changed_files(self) -> list[str]:
-        result = self._git("diff", "--cached", "--name-only")
+        result = self._git("diff", "--cached", "--name-only", *self._diff_base())
         return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+    def _diff_base(self) -> list[str]:
+        """The ref to diff against: the recorded task-start commit, falling back to `HEAD`."""
+        return [self._snapshot_sha] if self._snapshot_sha else []
 
     def diff_lines(self) -> int:
         """Added plus removed lines, for the report's patch-size column."""
