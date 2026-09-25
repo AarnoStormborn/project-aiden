@@ -77,6 +77,17 @@ class Sandbox:
     def create(self) -> Path:
         if self._path is not None:
             return self._path
+        # Structural guard, independent of environment inheritance. A sandbox is never created from
+        # a *task snapshot*: that commit exists only inside a sandbox, so seeing it as the base means
+        # sandboxes are being made inside a sandbox. This is what catches the graded code's own test
+        # suite, which runs through paths (`uv run` re-executing python, plugin-spawned subprocesses)
+        # that do not reliably carry an environment variable.
+        if not self.allow_nested and _is_task_snapshot(self.repo, self.base_commit):
+            raise SandboxError(
+                f"refused: {self.base_commit[:8]} is a task snapshot, which only exists inside a "
+                "sandbox — so this would nest an eval inside an eval. Pass allow_nested=True if that "
+                "is genuinely intended."
+            )
         if os.environ.get(NESTED_ENV) and not self.allow_nested:
             raise SandboxError(
                 "refused to create a sandbox inside a sandbox. The code under test is itself "
@@ -221,6 +232,22 @@ class Sandbox:
         return CommandResult(
             proc.returncode == 0, proc.stdout or "", proc.stderr or "", proc.returncode
         )
+
+
+def _is_task_snapshot(repo: Path, ref: str) -> bool:
+    """Whether ``ref`` is a commit this module created inside a sandbox."""
+    try:
+        proc = subprocess.run(  # noqa: S603 - argv list, no shell
+            ["git", "log", "-1", "--format=%s", ref],  # noqa: S607 - the user's git
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return proc.returncode == 0 and proc.stdout.strip().startswith("task ")
 
 
 def cleanup_worktrees(repo: Path) -> int:

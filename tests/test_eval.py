@@ -608,3 +608,57 @@ def test_mining_is_not_quadratic(repo: Path):
     before = count()
     mine(repo, limit=2, per_module=1)
     assert count() == before, "mining must not leave worktrees behind"
+
+
+def _registered_worktrees(repo: Path) -> int:
+    import subprocess
+
+    proc = subprocess.run(
+        ["git", "worktree", "list"],
+        cwd=str(repo),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return len(proc.stdout.splitlines())
+
+
+async def test_a_graded_run_cannot_create_sandboxes(repo: Path, simple_task: Task, tmp_path: Path):
+    """Regression: the agent runs tests through `bash`, which passes the environment through.
+
+    Without the marker in the runner's *own* environment, a graded run's test suite could mine
+    again — one task leaked 333 worktrees because the agent ran `pytest` in the worktree.
+    """
+
+    def sandbox_creating_agent():
+        async def agent(cwd: Path, _prompt: str) -> LoopResult:
+            import subprocess
+
+            # What `bash` would do: run the worktree's own tests, which include the eval suite.
+            subprocess.run(  # noqa: ASYNC221 - test helper, blocking on purpose
+                [
+                    "python",
+                    "-c",
+                    "import os; from pathlib import Path;print('AIDEN_EVAL_ACTIVE' in os.environ)",
+                ],
+                cwd=str(cwd),
+                capture_output=True,
+                check=False,
+            )
+            return LoopResult(answer="x", turns=1, tool_calls=0, usage=Usage(), cost_usd=0.0001)
+
+        return agent
+
+    import os as _os
+
+    before = _registered_worktrees(repo)
+    await run_task(
+        simple_task,
+        agent=sandbox_creating_agent(),
+        options=RunOptions(model="fake", seeds=1, sessions_dir=tmp_path / "sessions"),
+        worktree_root=tmp_path / "worktrees",
+        repo=repo,
+    )
+    assert _registered_worktrees(repo) == before, "a graded run leaked worktrees"
+    # And the marker is restored rather than left set for the rest of the process.
+    assert _os.environ.get("AIDEN_EVAL_ACTIVE") is None
