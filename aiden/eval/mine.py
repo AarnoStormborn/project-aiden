@@ -191,6 +191,14 @@ def mine(
     tasks: list[Task] = []
     rejections: list[Rejection] = []
     commit = _resolve_commit(repo, base_commit)
+    if not base_has_nesting_guard(repo, commit):
+        raise ValueError(
+            f"refusing to mine from {commit[:8]}: that commit predates the sandbox nesting guard, "
+            "and a task's base commit is also the version of the eval harness running inside the "
+            "worktree. A graded run executes that old code, whose `Sandbox.create()` has no guard, so "
+            "the worktree's own eval suite mines again and leaks worktrees — measured at 169 sandboxes "
+            "and a 240 s timeout per attempt. Mine from a commit that contains the guard."
+        )
 
     with Sandbox(repo, base_commit=commit) as box:
         for module in targets:
@@ -333,6 +341,32 @@ def _tracked_files(repo: Path, ref: str) -> set[str]:
     if proc.returncode != 0:
         return set()
     return {line.strip() for line in proc.stdout.splitlines() if line.strip()}
+
+
+def base_has_nesting_guard(repo: Path, commit: str) -> bool:
+    """Whether the eval code at ``commit`` refuses to nest sandboxes.
+
+    This matters because a task's base commit is not only the starting state of the code under test —
+    it is also the version of the *harness* that runs inside the worktree. Mining freezes that too, so
+    a task mined from an unguarded commit reintroduces the leak whenever it is graded, and no guard in
+    the current checkout can stop it: the current code is not what executes there.
+
+    Measured on this repository: mining inside a worktree at the pre-guard commit `1e5ef231` created
+    169 sandboxes and timed out after 240 s; the same call at a guarded commit created 0.
+    """
+    try:
+        proc = subprocess.run(  # noqa: S603 - argv list, no shell
+            ["git", "show", f"{commit}:aiden/eval/sandbox.py"],  # noqa: S607 - the user's git
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        # Unreadable is treated as unguarded: the safe assumption is the one that keeps the leak out.
+        return False
+    return proc.returncode == 0 and "NESTED_ENV" in proc.stdout
 
 
 def _resolve_commit(repo: Path, ref: str) -> str:

@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from aiden.eval.mine import (
+    base_has_nesting_guard,
     blank_body,
     candidate_functions,
     failing_tests_from_output,
@@ -662,3 +663,26 @@ async def test_a_graded_run_cannot_create_sandboxes(repo: Path, simple_task: Tas
     assert _registered_worktrees(repo) == before, "a graded run leaked worktrees"
     # And the marker is restored rather than left set for the rest of the process.
     assert _os.environ.get("AIDEN_EVAL_ACTIVE") is None
+
+
+# The eval runner commit, which predates the sandbox nesting guard. Used as a known-unguarded base:
+# a task mined from it carries old eval code into its worktree, where nothing refuses to nest.
+UNGUARDED_BASE = "1e5ef231"
+
+
+def test_the_guard_is_detected_in_history(repo: Path):
+    """A task's base commit is also the version of the *harness* running inside the worktree.
+
+    Mining freezes both, so a task mined from an unguarded commit reintroduces the worktree leak no
+    matter what the current checkout does — the current code is not what executes there.
+    """
+    assert base_has_nesting_guard(repo, "HEAD") is True
+    assert base_has_nesting_guard(repo, UNGUARDED_BASE) is False
+    # An unreadable ref is treated as unguarded: the safe assumption keeps the leak out.
+    assert base_has_nesting_guard(repo, "0" * 40) is False
+
+
+def test_mining_refuses_a_base_commit_without_the_nesting_guard(repo: Path):
+    """Regression: mining from 1e5ef231 created 169 sandboxes and timed out at 240 s when graded."""
+    with pytest.raises(ValueError, match="predates the sandbox nesting guard"):
+        mine(repo, base_commit=UNGUARDED_BASE, limit=1)
