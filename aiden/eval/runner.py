@@ -18,6 +18,7 @@ Steps 2 and 4 are separate on purpose: 2 checks the *task*, 4 checks the *run*.
 from __future__ import annotations
 
 import contextlib
+import os
 import shutil
 import subprocess
 import tempfile
@@ -33,7 +34,7 @@ from ..loop import LoopResult, run_loop
 from ..session import SessionStore
 from .oracle import baseline_check, grade
 from .report import TaskResult
-from .sandbox import Sandbox
+from .sandbox import NESTED_ENV, Sandbox
 from .task import Task
 
 #: An agent: given a working directory and a prompt, produce a LoopResult. Injected so tests need no
@@ -168,6 +169,18 @@ def prune_worktrees(repo: Path, root: Path | None) -> int:
             except OSError:
                 continue
     with contextlib.suppress(OSError, subprocess.TimeoutExpired):
+        # A locked registration is never removed by `prune` — that is why a run left residue: the
+        # directory was gone but the worktree stayed registered, and the next run could not clear it
+        # either. Unlock first, then prune. The main worktree is never touched.
+        for registration in _sandbox_registrations(repo):
+            subprocess.run(  # noqa: S603 - argv list, no shell
+                ["git", "worktree", "unlock", registration],  # noqa: S607 - the user's git, via PATH
+                cwd=str(repo),
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=False,
+            )
         subprocess.run(
             ["git", "worktree", "prune"],  # noqa: S607 - the user's git, via PATH
             cwd=str(repo),
@@ -177,6 +190,29 @@ def prune_worktrees(repo: Path, root: Path | None) -> int:
             check=False,
         )
     return removed
+
+
+def _sandbox_registrations(repo: Path) -> list[str]:
+    """Paths of every registered worktree except the main one."""
+    with contextlib.suppress(OSError, subprocess.TimeoutExpired):
+        proc = subprocess.run(
+            ["git", "worktree", "list", "--porcelain"],  # noqa: S607 - the user's git, via PATH
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        if proc.returncode != 0:
+            return []
+        paths = [
+            line.removeprefix("worktree ")
+            for line in proc.stdout.splitlines()
+            if line.startswith("worktree ")
+        ]
+        # The first entry is the repository itself; removing it would be catastrophic.
+        return paths[1:]
+    return []
 
 
 async def _run_seed(
@@ -209,7 +245,16 @@ async def _run_seed(
         )
         return result
 
-    # 3. run the agent
+    # 3. run the agent, with the nesting marker set in *this* process.
+    #
+    # The marker has to be set here rather than only in a sandbox's child environment: the agent runs
+    # tests through the `bash` tool, and `bash` passes the environment through to the test process. If
+    # it is not set, the graded run's own test suite can create sandboxes — that is how a single task
+    # leaked hundreds of worktrees, by running `pytest`, which ran the worktree's `tests/test_eval.py`,
+    # which mined again. It wraps only the agent call, because the eval's own sandbox creation is not
+    # the code being graded and would be refused by the same guard.
+    previous = os.environ.get(NESTED_ENV)
+    os.environ[NESTED_ENV] = "1"
     try:
         loop = await agent(box.path, task_prompt(task))
     except Exception as exc:
@@ -217,6 +262,11 @@ async def _run_seed(
         result.error = f"agent failed: {type(exc).__name__}: {exc}"
         result.duration_s = time.perf_counter() - started
         return result
+    finally:
+        if previous is None:
+            os.environ.pop(NESTED_ENV, None)
+        else:
+            os.environ[NESTED_ENV] = previous
 
     result.cost_usd = loop.cost_usd
     result.turns = loop.turns
