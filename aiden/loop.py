@@ -18,10 +18,21 @@ import asyncio
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from . import config, prompts
 from .approval import Approver, DenyAll
 from .checkpoint import Checkpoint, CheckpointStore
+from .context import (
+    SUMMARY_MAX_TOKENS,
+    apply_compaction,
+    cut_index,
+    estimate_tokens,
+    needs_compaction,
+    render_for_summary,
+    summarise,
+    summary_prompt,
+)
 from .events import (
     ApprovalRequested,
     ApprovalResolved,
@@ -42,6 +53,7 @@ from .providers.types import Completion, ModelInfo, Part, ToolCallPart, Usage
 from .session import (
     ENTRY_APPROVAL,
     ENTRY_ASSISTANT,
+    ENTRY_COMPACTION,
     ENTRY_DIAGNOSTIC,
     ENTRY_RUN_END,
     ENTRY_TOOL_RESULT,
@@ -128,15 +140,58 @@ async def run_loop(
     messages: list[Message] = [Message.text("user", question)]
     system = system_prompt or prompts.build(cwd)
 
+    previous_summary = ""
+    compactions = 0
+
     try:
         for turn in range(1, max_turns + 1):
             result.turns = turn
             sink.emit(TurnStarted(turn=turn))
 
+            # Request-time compaction, checked before *every* request rather than only between turns.
+            # Long runs are where context dies, and the check has to happen after tool results are
+            # appended and before the next request — which is exactly here ([r00] §3).
+            if compactions < config.MAX_COMPACTIONS and needs_compaction(
+                messages, system, info.context_window
+            ):
+                compacted = await _compact(
+                    suite,
+                    info,
+                    messages,
+                    result,
+                    sink,
+                    session,
+                    reason="above the window reserve",
+                    previous_summary=previous_summary,
+                    tail_budget_tokens=_usable_window(info),
+                )
+                if compacted is not None:
+                    messages, previous_summary = compacted
+                    compactions += 1
+
             completion = await _complete(suite, info, messages, system, max_tokens, thinking_level)
             _record_completion(session, completion, result, sink)
 
             if completion.stop_reason == "error":
+                # An overflow is the one error the loop itself can recover from: summarise and resend.
+                # Everything else ends the run, because retrying the same bytes cannot help. The
+                # classification comes from the provider layer; the decision is the loop's.
+                if completion.error_kind == "overflow" and compactions < config.MAX_COMPACTIONS:
+                    compacted = await _compact(
+                        suite,
+                        info,
+                        messages,
+                        result,
+                        sink,
+                        session,
+                        reason="the provider refused the request as too long",
+                        previous_summary=previous_summary,
+                        tail_budget_tokens=_usable_window(info),
+                    )
+                    if compacted is not None:
+                        messages, previous_summary = compacted
+                        compactions += 1
+                        continue
                 result.error = completion.diagnostic or completion.error or "provider error"
                 result.stop_reason = "error"
                 break
@@ -257,15 +312,140 @@ async def _complete(
     system: str,
     max_tokens: int,
     thinking_level: str | None,
+    tools: list[Any] | None = None,
 ) -> Completion:
     return await suite.complete(
         info,
         messages,
-        tool_specs(),
+        tool_specs() if tools is None else tools,
         system=system,
         max_tokens=max_tokens,
         thinking_level=thinking_level,
     )
+
+
+async def _compact(
+    suite: ProviderSuite,
+    info: ModelInfo,
+    messages: list[Message],
+    result: LoopResult,
+    sink: EventSink,
+    session: SessionStore,
+    *,
+    reason: str,
+    previous_summary: str,
+    tail_budget_tokens: int | None = None,
+) -> tuple[list[Message], str] | None:
+    """Replace the oldest part of the context with a summary.
+
+    Returns the new message list and the summary to pass on as iterative context, or ``None`` when
+    compaction cannot help — in which case the caller keeps its original error rather than reporting
+    a rescue that did not happen.
+    """
+    cut = cut_index(messages, tail_budget_tokens=tail_budget_tokens)
+    if cut <= 0:
+        # Nothing to elide. Reporting a compaction here would claim a saving that did not occur.
+        return None
+    # Compacting a prefix smaller than the largest possible summary makes the context *bigger*: the
+    # summary replaces less than it costs. Declining costs nothing and keeps the request honest.
+    if estimate_tokens(messages[:cut]) <= SUMMARY_MAX_TOKENS:
+        note = (
+            f"not compacting: only {estimate_tokens(messages[:cut])} tokens would be replaced, which "
+            f"is below the {SUMMARY_MAX_TOKENS}-token summary budget, so the context would grow"
+        )
+        result.diagnostics.append(note)
+        sink.emit(Diagnostic(message=note, level="info"))
+        session.append(ENTRY_DIAGNOSTIC, {"message": note, "level": "info"})
+        return None
+
+    prompt = summary_prompt(previous_summary, render_for_summary(messages[:cut]))
+    try:
+        # No tools: the summariser is asked for prose, and giving it tools invites a call that would
+        # be executed against the very context being replaced.
+        completion = await _complete(
+            suite, info, [Message.text("user", prompt)], "", SUMMARY_MAX_TOKENS, None, tools=[]
+        )
+    except Exception as exc:
+        _compaction_failed(result, sink, session, f"{type(exc).__name__}: {exc}")
+        return None
+
+    # A summary is real spend, so it joins the run's totals rather than sitting beside them.
+    if completion.usage.total_tokens or completion.cost_usd:
+        result.usage = result.usage + completion.usage
+        result.cost_usd += completion.cost_usd
+        sink.emit(UsageUpdated(usage=result.usage, cost_usd=result.cost_usd))
+        session.append(
+            ENTRY_USAGE,
+            {**_usage_dict(completion.usage), "cost_usd": round(completion.cost_usd, 6)},
+        )
+
+    compaction = summarise(completion, messages, cut, previous_summary=previous_summary)
+    if compaction.tokens_after >= compaction.tokens_before:
+        # The summary cost money already, but applying a compaction that does not shrink the context
+        # would make the next request *more* likely to overflow while looking like a fix. Refuse, and
+        # say so rather than reporting a saving that did not happen.
+        note = (
+            f"compaction declined: it would not have shrunk the context "
+            f"({compaction.tokens_before} -> {compaction.tokens_after} estimated tokens)"
+        )
+        result.diagnostics.append(note)
+        sink.emit(Diagnostic(message=note, level="info"))
+        session.append(ENTRY_DIAGNOSTIC, {"message": note, "level": "info"})
+        return None
+    new_messages = apply_compaction(messages, compaction)
+
+    note = (
+        f"context compacted ({reason}): {compaction.tokens_before} -> {compaction.tokens_after} "
+        f"estimated tokens, {compaction.first_kept_index} messages summarised"
+        + (
+            " (mechanical placeholder, the summariser returned nothing)"
+            if compaction.fallback
+            else ""
+        )
+    )
+    result.diagnostics.append(note)
+    level = "warning" if compaction.fallback else "info"
+    sink.emit(Diagnostic(message=note, level=level))
+    # Logged, because a compaction is the one event that makes the model's context diverge from the
+    # transcript: without it a reader cannot tell why the agent stopped knowing something.
+    session.append(
+        ENTRY_COMPACTION,
+        {
+            "summary": compaction.summary,
+            "first_kept_entry_id": compaction.first_kept_index,
+            "retained_tail": False,
+            "tokens_before": compaction.tokens_before,
+            "tokens_after": compaction.tokens_after,
+            "reason": reason,
+            "fallback": compaction.fallback,
+        },
+    )
+    return new_messages, compaction.summary
+
+
+def _usable_window(info: ModelInfo) -> int:
+    """Tokens a request may occupy: the model's window minus the room its reply needs.
+
+    Floored at 1 so a tiny or unknown window degrades to "keep as little as possible" rather than to
+    a negative budget, which would make the cut arithmetic meaningless.
+    """
+    return max(1, info.context_window - config.RESERVE_TOKENS)
+
+
+def _compaction_failed(
+    result: LoopResult, sink: EventSink, session: SessionStore, detail: str
+) -> None:
+    """Record a summariser failure loudly and decline to compact.
+
+    Declining is the honest choice: the alternative is dropping the prefix with nothing in its place,
+    which is the silent truncation this project names as a failure mode. The run then stops on its
+    original error, which is visible.
+    """
+    note = f"compaction failed, context left unchanged: {detail}"
+    result.diagnostics.append(note)
+    sink.emit(Diagnostic(message=note, level="error"))
+    session.append(ENTRY_DIAGNOSTIC, {"message": note, "level": "error"})
+    return None
 
 
 def _record_completion(

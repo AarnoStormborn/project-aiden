@@ -27,6 +27,7 @@ from ..events import (
 from ..providers.types import Usage
 from ..session import (
     ENTRY_ASSISTANT,
+    ENTRY_COMPACTION,
     ENTRY_DIAGNOSTIC,
     ENTRY_RUN_END,
     ENTRY_SESSION,
@@ -96,6 +97,29 @@ def events_from_entries(entries: list[Entry], *, cwd: str = "") -> list[Event]:
                     message=payload.get("message", ""), level=payload.get("level", "warning")
                 )
             )
+        elif entry.type == ENTRY_COMPACTION:
+            # Shown on replay because a compaction is the one event that makes the model's context
+            # diverge from the transcript. Without it, a replayed session shows messages the model
+            # never saw and gives no reason the agent stopped knowing something.
+            removed = int(payload.get("tokens_before", 0) or 0) - int(
+                payload.get("tokens_after", 0) or 0
+            )
+            events.append(
+                Diagnostic(
+                    message=(
+                        f"context compacted ({payload.get('reason', '')}): "
+                        f"{payload.get('tokens_before', 0)} -> {payload.get('tokens_after', 0)} "
+                        f"estimated tokens, {removed} freed"
+                        + (" [mechanical placeholder]" if payload.get("fallback") else "")
+                    ),
+                    level="info",
+                )
+            )
+            summary = str(payload.get("summary", "")).strip()
+            if summary:
+                # The summary is what the model was given in place of the elided messages, so the
+                # transcript should show it rather than only that a compaction happened.
+                events.append(Diagnostic(message=f"<context summary>\n{summary}", level="info"))
         elif entry.type == ENTRY_RUN_END:
             events.append(
                 RunFinished(

@@ -26,7 +26,8 @@ mainstream harnesses do not:
 | **`bash` with a command policy** | **done — `docs/plan/v0.2b-bash.md`** |
 | **`web_fetch` — extraction, SSRF refusal, approval** | **done — all 7 tools; `docs/plan/v0.2c-webfetch.md`** |
 | **Eval runner — mined tasks, oracle, seeded reports, change gate** | **done — `docs/plan/v0.3-eval-runner.md`** |
-| Compaction, steering, the learning subsystem | next |
+| **Compaction — the trigger, the pair-safe cut, structured summaries** | **done — `docs/plan/compaction.md`** |
+| Tier-2 self-update, steering, the learning subsystem | next |
 
 ## Quick start
 

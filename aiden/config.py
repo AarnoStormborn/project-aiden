@@ -126,6 +126,10 @@ GLOB_MAX_PATHS = 500
 CHARS_PER_TOKEN = 4
 RESERVE_TOKENS = 16_384
 KEEP_RECENT_TOKENS = 20_000
+#: Compactions allowed in one run. Each costs a summariser call, and a run that compacts repeatedly is
+#: losing more context than a summary can preserve — stopping and reporting is more honest than
+#: summarising summaries until the budget runs out.
+MAX_COMPACTIONS = int(os.environ.get("AIDEN_MAX_COMPACTIONS", 3))
 
 
 def ensure_dirs() -> None:

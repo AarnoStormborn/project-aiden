@@ -30,6 +30,10 @@ ENTRY_USAGE = "usage"
 ENTRY_DIAGNOSTIC = "diagnostic"
 #: An approval decision, recorded because the transcript is the audit trail.
 ENTRY_APPROVAL = "approval"
+#: A compaction: earlier messages were replaced by a summary. Logged because it is the only event
+#: that makes the model's context **diverge from the transcript** — a replay that ignored this would
+#: show messages the model never saw, and a reader could not tell why the agent forgot something.
+ENTRY_COMPACTION = "compaction"
 ENTRY_RUN_END = "run_end"
 
 

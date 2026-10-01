@@ -259,6 +259,10 @@ class Stop:
     usage: Usage = field(default_factory=Usage)
     cost_usd: float = 0.0
     message: str = ""
+    #: The classified error kind (``ProviderError.kind``), e.g. "overflow". Carried as a field
+    #: rather than re-parsed from ``message`` because the loop decides between compacting and
+    #: aborting, and string-matching the text is the thing ``providers/errors.py`` exists to avoid.
+    error_kind: str = ""
     type: Literal["stop"] = "stop"
 
 
@@ -277,6 +281,8 @@ class Completion:
     cost_usd: float = 0.0
     stop_reason: StopReason = "end_turn"
     error: str = ""
+    #: Classified error kind, so the loop can act on *what* failed. See ``Stop.error_kind``.
+    error_kind: str = ""
     # Human-readable explanation of a suspicious stop (truncation, exhausted budget).
     diagnostic: str = ""
 

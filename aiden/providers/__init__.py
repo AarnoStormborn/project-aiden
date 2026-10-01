@@ -183,6 +183,7 @@ class ProviderSuite:
                 completion.cost_usd = event.cost_usd
                 completion.stop_reason = event.reason
                 completion.error = event.message
+                completion.error_kind = event.error_kind
 
         for index in sorted(calls):
             raw = calls[index]

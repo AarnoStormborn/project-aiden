@@ -292,6 +292,7 @@ class _StreamState:
             usage=self.usage,
             cost_usd=self.model.cost.of(self.usage),
             message=str(error),
+            error_kind=error.kind,
         )
 
     def stop_event(self) -> Stop:
@@ -360,6 +361,7 @@ class _StreamState:
             cost_usd=self.model.cost.of(self.usage),
             stop_reason=self.stop_reason,
             error=self.error.message if self.error else "",
+            error_kind=self.error.kind if self.error else "",
             diagnostic=self.diagnostic(),
         )
 

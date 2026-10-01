@@ -698,3 +698,24 @@ def test_explicit_client_is_never_replaced_by_the_cache():
 
     assert asyncio.run(get()) is injected
     asyncio.run(injected.aclose())
+
+
+def test_an_overflow_reaches_the_loop_as_a_classified_kind():
+    """The loop decides between compacting and aborting, so the *kind* has to survive the trip.
+
+    Before this, only the error's text arrived at the loop, and `retry.py`'s overflow classification
+    was unroutable — the loop would have had to string-match the message it was already given.
+    """
+    from aiden.providers.errors import OverflowError_
+    from aiden.providers.transports.base import _StreamState
+
+    state = _StreamState(model=anthropic_model())
+    stop = state.fail(OverflowError_("prompt is too long: 210000 tokens > 200000 maximum"))
+    assert stop.reason == "error"
+    assert stop.error_kind == "overflow"
+
+    # And the non-overflow case must not be labelled as one, or every failure would compact.
+    from aiden.providers.errors import AuthError
+
+    other = _StreamState(model=anthropic_model())
+    assert other.fail(AuthError("bad key")).error_kind == "auth"
