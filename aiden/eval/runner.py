@@ -273,6 +273,18 @@ async def _run_seed(
         else:
             os.environ[NESTED_ENV] = previous
 
+    # A provider error means the agent never got a fair attempt, so this is an infrastructure
+    # failure, not a model failure. Measured consequence of not checking: an expired API key made
+    # every run in both halves fail with HTTP 401, each was recorded as `resolved=False`, and the
+    # gate reported a clean PASS on a comparison of two auth outages. AGENTS.md states the rule —
+    # infrastructure failures are excluded from the denominator so a broken runner cannot look like a
+    # weak model — and this is the check that makes it true.
+    if not loop.ok:
+        result.infra_failure = True
+        result.error = f"the agent could not run: {loop.error or loop.stop_reason}"
+        result.duration_s = time.perf_counter() - started
+        return result
+
     result.cost_usd = loop.cost_usd
     result.turns = loop.turns
     result.tool_calls = loop.tool_calls

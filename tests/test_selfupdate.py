@@ -727,3 +727,55 @@ def test_a_checkout_really_supplies_its_own_harness(repo: Path):
         "the checkout's harness did not win: the gate would measure the current checkout instead "
         f"of the candidate. Got: {probe.stdout!r}"
     )
+
+
+def test_the_selected_tasks_travel_to_the_subprocess(repo: Path):
+    """Regression: `--only` bounded nothing, because the task list never reached the child.
+
+    A two-task trial ran six tasks and reported six paired tasks. Nothing failed; it just cost three
+    times what it said and measured more than was asked for, which is the quietest way a harness can
+    be wrong about its own numbers.
+    """
+    from aiden.selfupdate.pipeline import harness_eval_command
+
+    spec = EvalSpec(
+        tasks=[
+            Task(id="alpha", repo="r", files={}),
+            Task(id="beta", repo="r", files={}),
+        ],
+        seeds=1,
+    )
+    command = harness_eval_command(Path("/t"), Path("/o.json"), "baseline", "abc", spec)
+    pairs = [command[index + 1] for index, item in enumerate(command) if item == "--only"]
+    assert pairs == ["alpha", "beta"], command
+
+
+def test_the_eval_reports_are_kept_as_evidence(repo: Path):
+    """Regression: `_keep_reports` was written and never called, so the verdict had no evidence.
+
+    The architecture asks a human to approve "diff + eval report". A decision whose numbers were
+    discarded is not reviewable, and the archive said `reports: []` while claiming an eval trailer.
+    """
+
+    async def scenario():
+        return await run(
+            proposal_for(repo),
+            repo=repo,
+            evaluator=evaluator(report(1, 4, cost=0.01), report(2, 4, cost=0.01)),
+            spec=EvalSpec(tasks=[Task(id="t", repo="r", files={})], seeds=1),
+            approver=RecordingApprover(),
+            include_tests=False,
+        )
+
+    outcome = asyncio.run(scenario())
+    assert len(outcome.report_paths) == 2, outcome.report_paths
+    names = {path.name for path in outcome.report_paths}
+    assert names == {
+        f"{outcome.proposal.id}-baseline.json",
+        f"{outcome.proposal.id}-candidate.json",
+    }
+    for path in outcome.report_paths:
+        assert path.exists(), path
+
+    archived = json.loads(outcome.archive_path.read_text())  # type: ignore[union-attr]
+    assert len(archived["reports"]) == 2, archived["reports"]

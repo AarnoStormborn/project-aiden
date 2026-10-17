@@ -105,6 +105,9 @@ class Outcome:
     commit_sha: str = ""
     declined: bool = False
     archive_path: Path | None = None
+    #: Where the two eval reports were kept. The architecture requires a human to review "diff +
+    #: eval report", so a verdict whose evidence was thrown away is not reviewable.
+    report_paths: list[Path] = field(default_factory=list)
 
     @property
     def blocked_before_work(self) -> bool:
@@ -191,6 +194,12 @@ def harness_eval_command(
     environment — none of which are visible in the report, and all of which are one refactor away
     from silently measuring the wrong thing.
     """
+    only: list[str] = []
+    for task in spec.tasks:
+        # The task list has to travel. Without it the subprocess runs whatever the --tasks directory
+        # holds, so `--only` bounds nothing and a "two task trial" silently spends six times over —
+        # which is how this was found: a two-task demo reported six paired tasks.
+        only.extend(["--only", task.id])
     return [
         sys.executable,
         "-m",
@@ -199,6 +208,7 @@ def harness_eval_command(
         "run",
         "--tasks",
         str(tasks_path),
+        *only,
         "--out",
         str(out),
         "--label",
@@ -295,6 +305,7 @@ async def run(
             else:
                 outcome.declined = True
 
+    outcome.report_paths = _keep_reports(repo, outcome)
     outcome.archive_path = _archive(repo, outcome)
     return outcome
 
@@ -383,6 +394,20 @@ def _apply(repo: Path, proposal: Proposal, outcome: Outcome) -> tuple[bool, str]
     return bool(sha), sha
 
 
+def _keep_reports(repo: Path, outcome: Outcome) -> list[Path]:
+    """Save both eval reports next to the archive, so the verdict has its evidence."""
+    directory = repo / ARCHIVE_DIR
+    directory.mkdir(parents=True, exist_ok=True)
+    kept: list[Path] = []
+    for name, run in (("baseline", outcome.baseline), ("candidate", outcome.candidate)):
+        if run is None:
+            continue
+        path = directory / f"{outcome.proposal.id}-{name}.json"
+        run.save(path)
+        kept.append(path)
+    return kept
+
+
 def _archive(repo: Path, outcome: Outcome) -> Path:
     """Keep the proposal and its verdict. Rejections are kept too — that is the point."""
     directory = repo / ARCHIVE_DIR
@@ -405,6 +430,7 @@ def _archive(repo: Path, outcome: Outcome) -> Path:
         "passed": bool(outcome.promotion and outcome.promotion.passed),
         "reasons": outcome.promotion.reasons if outcome.promotion else [],
         "eval_trailer": trailer_for(outcome),
+        "reports": [str(path.name) for path in outcome.report_paths],
         "applied": outcome.applied,
         "commit_sha": outcome.commit_sha,
         "declined": outcome.declined,

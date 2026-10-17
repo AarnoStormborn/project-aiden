@@ -779,3 +779,72 @@ def test_cleanup_cannot_reach_outside_its_own_root(repo: Path, simple_task: Task
         # A nested run cleaning up its own, unrelated root.
         prune_worktrees(repo, tmp_path / "other-root")
         assert box.path.exists(), "a nested cleanup must not delete a live sandbox"
+
+
+# --------------------------------------------------------------------------- outages are not results
+
+
+def _failing_agent(error: str = "auth/HTTP 401: This API key has expired."):
+    """An agent whose every turn ends in a provider error, as an expired key does."""
+
+    async def agent(cwd: Path, prompt: str) -> LoopResult:
+        return LoopResult(answer="", stop_reason="error", turns=1, error=error)
+
+    return agent
+
+
+async def test_a_provider_error_is_an_infrastructure_failure_not_a_model_miss(
+    repo: Path, simple_task: Task, tmp_path: Path
+):
+    """Regression: an expired API key scored as a clean PASS.
+
+    Every run in both halves failed with HTTP 401, each was recorded as `resolved=False`, and because
+    a run that never reached the model was counted as a model failure rather than an infrastructure
+    failure, the gate saw zero new failures and reported PASS. AGENTS.md's rule — infrastructure
+    failures are excluded from the denominator so a broken runner cannot look like a weak model — was
+    not enforced anywhere.
+    """
+    results = await run_task(
+        simple_task,
+        agent=_failing_agent(),
+        options=RunOptions(model="fake", seeds=1, sessions_dir=tmp_path / "sessions"),
+        worktree_root=tmp_path / "wt",
+        repo=repo,
+    )
+    result = results[0]
+    assert result.infra_failure is True, (
+        "a run that could not reach the model is not a model result"
+    )
+    assert "401" in result.error or "could not run" in result.error
+    assert result.resolved is False
+
+
+def test_two_outages_of_equal_size_do_not_pass_the_gate():
+    """The delta check cannot see them: zero new failures is zero, so an absolute floor is needed."""
+    from aiden.eval.report import RunReport, TaskResult, gate
+
+    def all_broken(label: str) -> RunReport:
+        run = RunReport(label=label, model="fake", harness_version="t")
+        for index in range(4):
+            run.results.append(TaskResult(task_id=f"t{index}", seed=1, infra_failure=True))
+        return run
+
+    decision: GateDecision = gate(all_broken("baseline"), all_broken("candidate"))
+    assert decision.new_infra_failures == 0, "the delta really is zero; that is the point"
+    assert decision.passed is False
+    assert any("cannot be trusted" in reason for reason in decision.reasons), decision.reasons
+
+
+def test_a_few_infrastructure_failures_do_not_block_a_real_result():
+    """The floor must not turn an ordinary flaky run into a refusal, or it would be ignored."""
+    from aiden.eval.report import RunReport, TaskResult, gate
+
+    def mostly_fine(label: str) -> RunReport:
+        run = RunReport(label=label, model="fake", harness_version="t")
+        for index in range(20):
+            run.results.append(TaskResult(task_id=f"t{index}", seed=1, resolved=True))
+        run.results.append(TaskResult(task_id="flaky", seed=1, infra_failure=True))
+        return run
+
+    decision = gate(mostly_fine("baseline"), mostly_fine("candidate"))
+    assert decision.passed is True, decision.reasons

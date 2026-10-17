@@ -23,6 +23,14 @@ from typing import Any
 #: configuration is documented and matched.
 NOISE_FLOOR_PP = 3.0
 
+#: Above this share of infrastructure failures, a run's numbers are not reported as a result at all.
+#: Rationale: the delta check cannot see an outage that hit both halves equally, so two 100%-failed
+#: runs compared as "no change" and passed. Set at 20% because a fifth of the runs failing is far
+#: past anything a working harness produces, and well below the level where the remaining sample
+#: could still speak. Sourced from AGENTS.md's rule that infrastructure failures are not model
+#: failures — excluding them from a rate is only meaningful if a rate over almost no runs is refused.
+INFRA_FLOOR_PCT = 20.0
+
 #: How much cost growth is tolerated for a non-negative resolved delta.
 COST_TOLERANCE = 0.15
 
@@ -79,6 +87,17 @@ class RunReport:
     @property
     def attempted(self) -> list[TaskResult]:
         return [r for r in self.results if not r.infra_failure]
+
+    @property
+    def infra_rate(self) -> float:
+        """Percentage of runs that never measured anything.
+
+        Used as an absolute floor by the gate: an outage that hits both halves equally produces a
+        delta of zero, so "no new failures" is not enough to make a comparison meaningful.
+        """
+        if not self.results:
+            return 0.0
+        return 100.0 * sum(1 for r in self.results if r.infra_failure) / len(self.results)
 
     @property
     def resolved_rate(self) -> float:
@@ -245,6 +264,19 @@ def gate(baseline: RunReport, candidate: RunReport) -> GateDecision:
     if decision.new_infra_failures > 0:
         decision.passed = False
         decision.reasons.append(f"{decision.new_infra_failures} new infrastructure failure(s)")
+
+    # An absolute floor, not just a delta. Two outages of equal size have a delta of zero, so the
+    # check above cannot see them — and a comparison where most runs never reached the model is not
+    # a comparison. This is not hypothetical: an expired API key made every run in both halves fail
+    # with HTTP 401 and the gate reported a clean PASS, because zero new failures is zero.
+    for name, report in (("baseline", baseline), ("candidate", candidate)):
+        if report.infra_rate > INFRA_FLOOR_PCT:
+            decision.passed = False
+            decision.reasons.append(
+                f"{report.infra_rate:.0f}% of the {name} runs were infrastructure failures "
+                f"(floor {INFRA_FLOOR_PCT:.0f}%): the measurement cannot be trusted, whatever the "
+                "delta says"
+            )
 
     if decision.passed and 0 < decision.resolved_delta_pp < NOISE_FLOOR_PP:
         decision.passed = False
