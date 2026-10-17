@@ -38,6 +38,16 @@ def build_parser() -> argparse.ArgumentParser:
     run_cmd.add_argument("--max-turns", type=int, default=15, dest="max_turns")
     run_cmd.add_argument("--max-cost", type=float, default=1.0, dest="max_cost")
     run_cmd.add_argument("--only", action="append", dest="only", help="task id (repeatable)")
+    run_cmd.add_argument(
+        "--rebase",
+        default="",
+        help=(
+            "run every task against this commit instead of the one it was mined at. This is how a "
+            "harness change is measured: a task's base commit is also the version of the harness "
+            "that runs inside its worktree, so comparing two harnesses means the same tasks at two "
+            "commits (see docs/plan/v0.3-eval-runner.md 9a)."
+        ),
+    )
 
     report_cmd = sub.add_parser("report", help="summarise a saved run")
     report_cmd.add_argument("run", type=Path)
@@ -108,6 +118,13 @@ async def cmd_run(args: argparse.Namespace) -> int:
     if not tasks:
         print(f"error: no tasks in {args.tasks}", file=sys.stderr)
         return 2
+
+    if args.rebase:
+        # The same tasks at a different commit: that is what makes a harness comparison mean
+        # anything, because the harness running in each worktree is that worktree's own code.
+        from dataclasses import replace
+
+        tasks = [replace(task, base_commit=args.rebase) for task in tasks]
 
     options = RunOptions(
         model=args.model,

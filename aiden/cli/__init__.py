@@ -10,6 +10,7 @@ commands:
   tui              interactive session in the terminal (needs a tty)
   ask "question"   ask one question and exit
   eval             mine tasks from this repo, run them, and gate a harness change
+  selfupdate       evaluate a proposed change to Aiden, and gate it (Tier 2)
   providers        inspect, authenticate and refresh the provider suite
   sessions         list recorded sessions for this project
   version          print the Aiden version
@@ -28,6 +29,10 @@ def main(argv: list[str] | None = None) -> int:
         from .eval import main as eval_main
 
         return eval_main(rest)
+    if command == "selfupdate":
+        from .selfupdate import main as selfupdate_main
+
+        return selfupdate_main(rest)
     if command == "providers":
         from .providers import main as providers_main
 
