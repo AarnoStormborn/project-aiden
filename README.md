@@ -27,7 +27,8 @@ mainstream harnesses do not:
 | **`web_fetch` — extraction, SSRF refusal, approval** | **done — all 7 tools; `docs/plan/v0.2c-webfetch.md`** |
 | **Eval runner — mined tasks, oracle, seeded reports, change gate** | **done — `docs/plan/v0.3-eval-runner.md`** |
 | **Compaction — the trigger, the pair-safe cut, structured summaries** | **done — `docs/plan/compaction.md`** |
-| Tier-2 self-update, steering, the learning subsystem | next |
+| **Tier-2 self-update — scope policy, static + eval gates, approval** | **pipeline done — `docs/plan/selfupdate.md`** |
+| The proposer (learning subsystem), steering | next |
 
 ## Quick start
 
